@@ -14,32 +14,10 @@ protected:
   std::mutex storeMutex;
 
 public:
-  void Set(uint32_t id, SwooshData *data) {
-    std::lock_guard<std::mutex> guard(storeMutex);
-    store[id] = data;
-  }
-
-  SwooshData *Get(uint32_t id) {
-    std::lock_guard<std::mutex> guard(storeMutex);
-    
-    auto it = store.find(id);
-    if (it != store.end()) {
-      return it->second;
-    }
-    return nullptr;
-  }
-
-  SwooshData *Remove(uint32_t id) {
-    std::lock_guard<std::mutex> guard(storeMutex);
-
-    auto it = store.find(id);
-    if (it != store.end()) {
-      SwooshData *ret = it->second;
-      store.erase(it);
-      return ret;
-    }
-    return nullptr;
-  }
+  void Store(uint32_t id, SwooshData *data);
+  SwooshData *Acquire(uint32_t id, uint64_t cur_time);
+  bool Release(uint32_t id);
+  void RemoveExpired(uint64_t cur_time);
 };
 
 #endif /* SHWOOSH_DATA_STORE_H_FILE */

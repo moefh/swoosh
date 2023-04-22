@@ -10,8 +10,8 @@
 #include "network.h"
 #include "util.h"
 
-//#define DebugLog(...) do {} while (0)
-//#define DebugDumpBytes(...) do {} while (0)
+#define DebugLog(...) do {} while (0)
+#define DebugDumpBytes(...) do {} while (0)
 
 #if defined(_WIN32)
 #define SETUP_WINSOCK 1

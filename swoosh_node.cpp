@@ -5,6 +5,7 @@
 #include <random>
 #include <thread>
 #include <wx/wx.h>
+#include <wx/time.h>
 
 #include "swoosh_data.h"
 #include "util.h"
@@ -15,6 +16,18 @@ uint32_t SwooshNode::MakeClientId() {
   std::random_device rd;
   std::uniform_int_distribution<uint32_t> dist;
   return dist(rd);
+}
+
+void SwooshNode::Sleep(uint32_t msec)
+{
+  wxMilliSleep(msec);
+}
+
+uint64_t SwooshNode::GetTime(uint32_t msec_in_future)
+{
+  wxLongLong now = wxGetUTCTimeMillis();
+
+  return (((uint64_t) now.GetHi()) << 32 | ((uint64_t) now.GetLo())) + msec_in_future;
 }
 
 int SwooshNode::OnBeaconReceived(net_msg_beacon *beacon, void *user_data)
@@ -74,10 +87,22 @@ void SwooshNode::StartTCPServer()
   tcp_server_thread.detach();
 }
 
+void SwooshNode::StartDataCollector()
+{
+  std::thread data_collector_thread{[this] {
+    while (true) {
+      Sleep(5000);
+      uint64_t cur_time = GetTime(0);
+      data_store.RemoveExpired(cur_time);
+    }
+  }};
+  data_collector_thread.detach();
+}
+
 void SwooshNode::SendData(SwooshData *data)
 {
   uint32_t message_id = next_message_id++;
-  data_store.Set(message_id, data);
+  data_store.Store(message_id, data);
 
   std::thread pre_send_thread{[message_id] {
     net_send_msg_beacon(message_id);
@@ -96,7 +121,7 @@ void SwooshNode::SendNetMessage(net_socket *sock)
   }
 
   // get data corresponding to the message id
-  SwooshData *data = data_store.Get(message_id);
+  SwooshData *data = data_store.Acquire(message_id, GetTime(0));
   if (!data) {
     DebugLog("ERROR: message %u not found\n", message_id);
     net_close_socket(sock);
@@ -106,6 +131,7 @@ void SwooshNode::SendNetMessage(net_socket *sock)
   // send data
   data->Send(sock);
   net_close_socket(sock);
+  data_store.Release(message_id);
 }
 
 void SwooshNode::ReceiveNetMessage(net_socket *sock)

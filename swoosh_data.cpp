@@ -17,7 +17,7 @@ SwooshData *SwooshData::ReceiveData(net_socket *sock, uint32_t data_type_id)
   }
 }
 
-SwooshTextData::SwooshTextData(net_socket *sock) : is_good(false), text("")
+SwooshTextData::SwooshTextData(net_socket *sock) : SwooshData(0), is_good(false), text("")
 {
   // read message length
   uint32_t data_len = 0;

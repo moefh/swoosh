@@ -14,6 +14,7 @@ protected:
   void OnNetNotify(const std::string &text);
   void OnNetReceivedData(SwooshData *data, const std::string &host, int port);
 
+  wxFont messageTextFont;
   wxAuiNotebook *notebook;
   wxTextCtrl *sendText;
   wxButton *sendButton;

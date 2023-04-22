@@ -18,11 +18,21 @@ protected:
   virtual int GetTypeId() = 0;
   virtual int SendContent(net_socket *sock) = 0;
 
+  int num_refs;
+  uint64_t valid_until;
+
 public:
+  SwooshData(uint64_t valid_until) : num_refs(0), valid_until(valid_until) {}
   virtual ~SwooshData() = default;
 
   virtual bool IsGood() = 0;
   
+  void AddRef() { num_refs++; }
+  void RemoveRef() { num_refs--; }
+  bool hasRefs() { return num_refs != 0; }
+
+  bool IsExpiredAt(uint64_t time) { return (valid_until != 0) && (valid_until < time); }
+
   int Send(net_socket *sock) {
     if (net_send_u32(sock, GetTypeId()) != 0) {
       return -1;
@@ -42,7 +52,7 @@ protected:
   virtual int SendContent(net_socket *sock);
 
 public:
-  SwooshTextData(const std::string &str) : is_good(true), text(str) {};
+  SwooshTextData(uint64_t valid_until, const std::string &str) : SwooshData(valid_until), is_good(true), text(str) {};
   SwooshTextData(net_socket *sock);
 
   virtual ~SwooshTextData() = default;

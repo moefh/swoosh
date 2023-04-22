@@ -24,6 +24,7 @@ SwooshFrame::SwooshFrame()
   : wxFrame(nullptr, wxID_ANY, "Swoosh", wxDefaultPosition, wxSize(800, 600)),
     net(*this, UDP_SERVER_PORT, TCP_SERVER_PORT, USE_IPV6)
 {
+  messageTextFont.Create(12, wxFontFamily::wxFONTFAMILY_TELETYPE, wxFontStyle::wxFONTSTYLE_NORMAL, wxFontWeight::wxFONTWEIGHT_NORMAL);
   SetupMenu();
   SetupStatusBar();
   SetupContent();
@@ -54,8 +55,8 @@ void SwooshFrame::AddTextPage(const std::string &title, const std::string &conte
 {
   long flags = wxTE_MULTILINE|wxTE_DONTWRAP|wxTE_RICH2|wxTE_READONLY|wxTE_AUTO_URL;
 
-  wxTextCtrl* text = new wxTextCtrl(notebook, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, flags);
-  text->SetFont(wxFont(wxSize(16, 16), wxFontFamily::wxFONTFAMILY_TELETYPE, wxFontStyle::wxFONTSTYLE_NORMAL, wxFontWeight::wxFONTWEIGHT_NORMAL));
+  wxTextCtrl *text = new wxTextCtrl(notebook, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, flags);
+  text->SetFont(messageTextFont);
   text->AppendText(content);
   text->SetInsertionPoint(0);
   text->Bind(wxEVT_TEXT_URL, &SwooshFrame::OnUrlClicked, this);
@@ -97,7 +98,7 @@ void SwooshFrame::SetupContent()
   long sendTextStyle = wxTE_MULTILINE|wxTE_DONTWRAP|wxTE_RICH|wxWANTS_CHARS;
   sendText = new wxTextCtrl(bottomPanel, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, sendTextStyle);
   sendText->Bind(wxEVT_KEY_UP, &SwooshFrame::OnSendTextKeyPressed, this);
-  sendText->SetFont(wxFont(wxSize(16, 16), wxFontFamily::wxFONTFAMILY_TELETYPE, wxFontStyle::wxFONTSTYLE_NORMAL, wxFontWeight::wxFONTWEIGHT_NORMAL));
+  sendText->SetFont(messageTextFont);
   bottomSizer->Add(sendText, wxSizerFlags(1).Expand().Border(wxLEFT|wxRIGHT|wxBOTTOM));
 
   sendButton = new wxButton(bottomPanel, wxID_ANY, "Send");

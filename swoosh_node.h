@@ -22,32 +22,31 @@ private:
   SwooshDataStore data_store;
   uint32_t client_id;
   uint32_t next_message_id;
-  int server_udp_port;
-  int server_tcp_port;
-  bool use_ipv6;
 
   void StartUDPServer();
   void StartTCPServer();
+  void StartDataCollector();
 
   static bool running;
   static int OnBeaconReceived(net_msg_beacon *beacon, void *user_data);
   static void OnMessageRequested(net_socket *sock, void *user_data);
   static uint32_t MakeClientId();
+  static uint64_t GetTime(uint32_t msec_in_future);
+  static void Sleep(uint32_t msec);
 
 public:
-  SwooshNode(SwooshNodeClient &client, int server_udp_port, int server_tcp_port, bool use_ipv6)
-      : client(client), server_udp_port(server_udp_port), server_tcp_port(server_tcp_port),
-        use_ipv6(use_ipv6) {
+  SwooshNode(SwooshNodeClient &client, int server_udp_port, int server_tcp_port, bool use_ipv6) : client(client) {
     running = true;
     client_id = MakeClientId();
     next_message_id = 1;
     net_setup(client_id, server_udp_port, server_tcp_port, use_ipv6);
     StartUDPServer();
     StartTCPServer();
+    StartDataCollector();
   }
   void Stop() { running = false; }
   void SendData(SwooshData *data);
-  void SendText(const std::string &text) { SendData(new SwooshTextData(text)); }
+  void SendText(const std::string &text) { SendData(new SwooshTextData(GetTime(5000), text)); }
   void SendNetMessage(net_socket *sock);
   void ReceiveNetMessage(net_socket *sock);
 };
