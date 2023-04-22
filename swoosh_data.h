@@ -1,5 +1,5 @@
-#ifndef SWOOSH_DATA_FILE
-#define SWOOSH_DATA_FILE
+#ifndef SWOOSH_DATA_H_FILE
+#define SWOOSH_DATA_H_FILE
 
 #include <cstdint>
 #include <string>
@@ -9,28 +9,46 @@
 
 #include "network.h"
 
+enum {
+  SWOOSH_DATA_TEXT = NET_MAKE_MAGIC('T', 'e', 'x', 't'),
+};
+
 class SwooshData {
+protected:
+  virtual int GetTypeId() = 0;
+  virtual int SendContent(net_socket *sock) = 0;
+
 public:
-  virtual int Send(net_socket *sock) = 0;
   virtual ~SwooshData() = default;
+
+  virtual bool IsGood() = 0;
+  
+  int Send(net_socket *sock) {
+    if (net_send_u32(sock, GetTypeId()) != 0) {
+      return -1;
+    }
+    return SendContent(sock);
+  };
+
+  static SwooshData *ReceiveData(net_socket *sock, uint32_t type_id);
 };
 
 class SwooshTextData : public SwooshData {
 protected:
-  std::vector<unsigned char> data;
+  bool is_good;
+  std::string text;
+
+  virtual int GetTypeId() { return SWOOSH_DATA_TEXT; };
+  virtual int SendContent(net_socket *sock);
 
 public:
-  SwooshTextData(std::vector<unsigned char> data) : data(data) {}
+  SwooshTextData(const std::string &str) : is_good(true), text(str) {};
+  SwooshTextData(net_socket *sock);
 
-  SwooshTextData(const std::string &str) {
-    data.reserve(str.size());
-    std::transform(std::begin(str), std::end(str), std::back_inserter(data), [](char c){
-      return (unsigned char) c;
-    });
-  }
-
-  virtual int Send(net_socket *sock);
   virtual ~SwooshTextData() = default;
+
+  virtual bool IsGood() { return is_good; };
+  virtual std::string &GetText() { return text; }
 };
 
-#endif /* SOOSH_DATA_FILE */
+#endif /* SOOSH_DATA_H_FILE */

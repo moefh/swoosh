@@ -7,10 +7,7 @@
 #include <wx/wx.h>
 
 #include "swoosh_data.h"
-#include "swoosh_sender.h"
 #include "util.h"
-
-#define MAX_TRANSFER_DATA_SIZE  (512*1024*1024)
 
 bool SwooshNode::running = false;
 
@@ -20,70 +17,112 @@ uint32_t SwooshNode::MakeClientId() {
   return dist(rd);
 }
 
-void SwooshNode::SendDataCallback(struct net_socket *sock, void *user_data)
-{
-  if (!running) {
-    return;
-  }
-
-  SwooshSender *sender = (SwooshSender *) user_data;
-  sender->Send(sock);
-}
-
-int SwooshNode::ServerRecvCallback(net_msg_beacon *beacon, void *user_data)
+int SwooshNode::OnBeaconReceived(net_msg_beacon *beacon, void *user_data)
 {
   if (!running) {
     return -1;
   }
+
   SwooshNode *swoosh_node = (SwooshNode *) user_data;
   std::thread receiver_thread{[swoosh_node, beacon] {
+    uint32_t message_id = net_get_beacon_message_id(beacon);
     struct net_socket *sock = net_connect_to_beacon(beacon);
     if (! sock) {
       return;
     }
-    uint32_t data_len = 0;
-    if (net_recv_data_len(sock, &data_len) < 0) {
-      DebugLog("ERROR: can't read data transfer size\n");
+
+    // send request for message with our ID
+    if (net_send_u32(sock, message_id) != 0) {
       net_close_socket(sock);
       return;
     }
-    if (data_len > MAX_TRANSFER_DATA_SIZE) {
-      DebugLog("ERROR: invalid data transfer size: %u (max is %u)\n", data_len, MAX_TRANSFER_DATA_SIZE);
-      net_close_socket(sock);
-      return;
-    }
-    std::vector<char> data(data_len, 'a');
-    int ret = net_recv_data(sock, data.data(), data_len);
+
+    // read message
+    swoosh_node->ReceiveNetMessage(sock);
     net_close_socket(sock);
-    if (ret < 0) {
-      DebugLog("ERROR: error receiving data\n");
-      return;
-    }
-    swoosh_node->client.OnNetReceivedText(std::string(data.data(), data.size()), "Message", 0);
   }};
   receiver_thread.detach();
   return 0;
 }
 
-void SwooshNode::StartServer()
+void SwooshNode::OnMessageRequested(net_socket *sock, void *user_data)
 {
-  net_setup(client_id, server_udp_port, first_tcp_port, last_tcp_port, use_ipv6);
+  SwooshNode *swoosh_node = (SwooshNode *) user_data;
+  std::thread message_thread{[swoosh_node, sock] {
+    swoosh_node->SendNetMessage(sock);
+  }};
+  message_thread.detach();
+}
+
+void SwooshNode::StartUDPServer()
+{
   std::thread server_thread{[this] {
-    if (net_udp_server(SwooshNode::ServerRecvCallback, this) != 0) {
-      client.OnNetNotify("ERROR: can't initialize network server");
+    if (net_udp_server(SwooshNode::OnBeaconReceived, this) != 0) {
+      client.OnNetNotify("ERROR: can't initialize UDP server");
     }
   }};
   server_thread.detach();
 }
 
+void SwooshNode::StartTCPServer()
+{
+  std::thread tcp_server_thread{[this] {
+    if (net_tcp_server(SwooshNode::OnMessageRequested, this) != 0) {
+      client.OnNetNotify("ERROR: can't initialize TCP server");
+    }
+  }};
+  tcp_server_thread.detach();
+}
+
 void SwooshNode::SendData(SwooshData *data)
 {
-  SwooshSender *sender = new SwooshSender(data);
+  uint32_t message_id = next_message_id++;
+  data_store.Set(message_id, data);
 
-  std::thread pre_send_thread{[this, sender] {
-    net_msg_send(SwooshNode::SendDataCallback, sender);
-    sender->WaitFinished();
-    delete sender;
+  std::thread pre_send_thread{[message_id] {
+    net_send_msg_beacon(message_id);
   }};
   pre_send_thread.detach();
+}
+
+void SwooshNode::SendNetMessage(net_socket *sock)
+{
+  // read message id
+  uint32_t message_id = 0;
+  if (net_recv_u32(sock, &message_id) < 0) {
+    DebugLog("ERROR: can't read message id\n");
+    net_close_socket(sock);
+    return;
+  }
+
+  // get data corresponding to the message id
+  SwooshData *data = data_store.Get(message_id);
+  if (!data) {
+    DebugLog("ERROR: message %u not found\n", message_id);
+    net_close_socket(sock);
+    return;
+  }
+
+  // send data
+  data->Send(sock);
+  net_close_socket(sock);
+}
+
+void SwooshNode::ReceiveNetMessage(net_socket *sock)
+{
+  // read data type
+  uint32_t data_type_id;
+  if (net_recv_u32(sock, &data_type_id) != 0) {
+    DebugLog("ERROR: can't read message type\n");
+    return;
+  }
+
+  // read message
+  SwooshData *data = SwooshData::ReceiveData(sock, data_type_id);
+
+  // show message on UI
+  if (data->IsGood()) {
+    client.OnNetReceivedData(data, "Message", 0);
+  }
+  delete data;
 }

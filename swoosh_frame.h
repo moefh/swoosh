@@ -12,7 +12,7 @@ class SwooshFrame : public wxFrame, public SwooshNodeClient
 protected:
   SwooshNode net;
   void OnNetNotify(const std::string &text);
-  void OnNetReceivedText(const std::string &text, const std::string &host, int port);
+  void OnNetReceivedData(SwooshData *data, const std::string &host, int port);
 
   wxAuiNotebook *notebook;
   wxTextCtrl *sendText;

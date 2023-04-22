@@ -12,9 +12,8 @@
 
 #include <wx/splitter.h>
 
-#define SERVER_UDP_PORT 5559
-#define FIRST_TCP_PORT  5559
-#define LAST_TCP_PORT   5659
+#define UDP_SERVER_PORT 5559
+#define TCP_SERVER_PORT 5559
 #define USE_IPV6        0
 
 enum {
@@ -23,7 +22,7 @@ enum {
 
 SwooshFrame::SwooshFrame()
   : wxFrame(nullptr, wxID_ANY, "Swoosh", wxDefaultPosition, wxSize(800, 600)),
-    net(*this, SERVER_UDP_PORT, FIRST_TCP_PORT, LAST_TCP_PORT, USE_IPV6)
+    net(*this, UDP_SERVER_PORT, TCP_SERVER_PORT, USE_IPV6)
 {
   SetupMenu();
   SetupStatusBar();
@@ -51,7 +50,7 @@ void SwooshFrame::SendTextMessage()
   }
 }
 
-void SwooshFrame::AddTextPage(const std::string& title, const std::string& content)
+void SwooshFrame::AddTextPage(const std::string &title, const std::string &content)
 {
   long flags = wxTE_MULTILINE|wxTE_DONTWRAP|wxTE_RICH2|wxTE_READONLY|wxTE_AUTO_URL;
 
@@ -134,23 +133,23 @@ void SwooshFrame::SetupStatusBar()
   SetStatusText("");
 }
 
-void SwooshFrame::OnExit(wxCommandEvent& event)
+void SwooshFrame::OnExit(wxCommandEvent &event)
 {
   Close(true);
 }
 
-void SwooshFrame::OnAbout(wxCommandEvent& event)
+void SwooshFrame::OnAbout(wxCommandEvent &event)
 {
   wxMessageDialog dlg(this, "By MoeFH\n\nhttps://github.com/moefh/swoosh", "About Swoosh", wxOK);
   dlg.ShowModal();
 }
 
-void SwooshFrame::OnSendClicked(wxCommandEvent& event)
+void SwooshFrame::OnSendClicked(wxCommandEvent &event)
 {
   SendTextMessage();
 }
 
-void SwooshFrame::OnClose(wxCloseEvent& event)
+void SwooshFrame::OnClose(wxCloseEvent &event)
 {
 #if 0
   if (event.CanVeto()) {
@@ -165,11 +164,11 @@ void SwooshFrame::OnClose(wxCloseEvent& event)
   Destroy();
 }
 
-void SwooshFrame::OnQuit(wxCommandEvent& WXUNUSED(event)) {
+void SwooshFrame::OnQuit(wxCommandEvent &WXUNUSED(event)) {
   Close(true);
 }
 
-void SwooshFrame::OnNetNotify(const std::string& message)
+void SwooshFrame::OnNetNotify(const std::string &message)
 {
   std::string copy = message;
   wxGetApp().CallAfter([this, copy] {
@@ -177,18 +176,25 @@ void SwooshFrame::OnNetNotify(const std::string& message)
   });
 }
 
-void SwooshFrame::OnNetReceivedText(const std::string& text, const std::string& host, int port)
+void SwooshFrame::OnNetReceivedData(SwooshData *data, const std::string &host, int port)
 {
-  std::string source = host;
-  std::string message = text;
-  wxGetApp().CallAfter([this, source, message] {
-    AddTextPage(source, message);
-  });
+  // text
+  SwooshTextData *text = dynamic_cast<SwooshTextData *>(data);
+  if (text) {
+    std::string source = host;
+    std::string message = text->GetText();
+    wxGetApp().CallAfter([this, source, message] {
+      AddTextPage(source, message);
+    });
+    return;
+  }
+
+  DebugLog("WARNING: ignoring message of unknown type");
 }
 
-void SwooshFrame::OnUrlClicked(wxTextUrlEvent& event)
+void SwooshFrame::OnUrlClicked(wxTextUrlEvent &event)
 {
-  auto& mouse = event.GetMouseEvent();
+  auto &mouse = event.GetMouseEvent();
   if (mouse.Button(wxMOUSE_BTN_LEFT) && mouse.LeftUp()) {
     auto textCtrl = dynamic_cast<wxTextCtrl*>(event.GetEventObject());
     if (!textCtrl) {

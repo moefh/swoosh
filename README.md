@@ -14,9 +14,10 @@ beacon) announcing the new message for everyone in your local network.
 Other instances of `swoosh` in other computers that receive the beacon
 then connect to the sender to retrieve the message contents.
 
-By default, `swoosh` listens and broadcasts on UDP port 5559. Messages
-are transmitted on TCP ports 5559-5659 (a free port in this range is
-chosen every time).
+By default, `swoosh` uses TCP and UDP ports 5559, and sends small
+broadcast packets to UDP port 5559 with every message sent. The port
+numbers can be changed in `swoosh_frame.cpp`, and will be
+configurable in the UI in the future.
 
 # Compilation
 

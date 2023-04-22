@@ -36,7 +36,7 @@
     <ClInclude Include="swoosh_data.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="swoosh_sender.h">
+    <ClInclude Include="swoosh_data_store.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -59,7 +59,7 @@
     <ClCompile Include="swoosh_data.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="swoosh_sender.cpp">
+    <ClCompile Include="swoosh_data_store.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
