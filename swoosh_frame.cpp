@@ -11,6 +11,10 @@
 #include "util.h"
 
 #include <wx/splitter.h>
+#include <wx/listbook.h>
+
+#include "data/folder.xpm"
+#include "data/write.xpm"
 
 #define UDP_SERVER_PORT 5559
 #define TCP_SERVER_PORT 5559
@@ -25,6 +29,11 @@ SwooshFrame::SwooshFrame()
     net(*this, UDP_SERVER_PORT, TCP_SERVER_PORT, USE_IPV6)
 {
   messageTextFont.Create(12, wxFontFamily::wxFONTFAMILY_TELETYPE, wxFontStyle::wxFONTSTYLE_NORMAL, wxFontWeight::wxFONTWEIGHT_NORMAL);
+
+  imageList = new wxImageList(32, 32);
+  imageList->Add(wxBitmap(wxBitmap(write_xpm).ConvertToImage().Rescale(32, 32)));
+  imageList->Add(wxBitmap(wxBitmap(folder_xpm).ConvertToImage().Rescale(32, 32)));
+
   SetupMenu();
   SetupStatusBar();
   SetupContent();
@@ -35,7 +44,7 @@ SwooshFrame::SwooshFrame()
   Bind(wxEVT_SIZE, &SwooshFrame::OnSize, this);
   Bind(wxEVT_CLOSE_WINDOW, &SwooshFrame::OnClose, this);
 
-  Connect(ID_SendTextMessage, wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(SwooshFrame::OnSendClicked));
+  Connect(ID_SendTextMessage, wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(SwooshFrame::OnSendTextClicked));
   wxAcceleratorEntry entries[] = {
     wxAcceleratorEntry(wxACCEL_CTRL, WXK_RETURN, ID_SendTextMessage),
   };
@@ -46,12 +55,46 @@ void SwooshFrame::SendTextMessage()
 {
   auto text = sendText->GetValue();
   if (text.length() != 0) {
-    net.SendText(text.ToStdString());
+    net.SendDataBeacon(new SwooshTextData(SwooshNode::GetTime(5000), text.ToStdString()));
     sendText->SetValue("");
   }
 }
 
-void SwooshFrame::AddTextPage(const std::string &title, const std::string &content)
+void SwooshFrame::SendFile(std::string file_name)
+{
+  SwooshFileData *data = new SwooshFileData(SWOOSH_DATA_ALWAYS_VALID, file_name);
+  net.SendDataBeacon(data);
+
+  auto name = GetPathFilename(file_name);
+  wxVector<wxVariant> row;
+  row.push_back(wxVariant("file"));
+  row.push_back(wxVariant(name));
+  row.push_back(wxVariant(file_name));
+  localFileList->AppendItem(row);
+}
+
+void SwooshFrame::AddRemoteFile(SwooshFileData *file)
+{
+  wxVector<wxVariant> row;
+  row.push_back(wxVariant("file"));
+  row.push_back(wxVariant(file->GetFileName()));
+  row.push_back(wxVariant(""));
+  row.push_back(wxVariant(0));
+  remoteFileList->AppendItem(row, (wxUIntPtr) file);
+
+  // associate data <-> list
+  for (int row = 0; row < remoteFileList->GetItemCount(); row++) {
+    auto item = remoteFileList->RowToItem(row);
+    if (remoteFileList->GetItemData(item) == (wxUIntPtr) file) {
+      remoteFileDataItem[file] = item;
+      return;
+    }
+  }
+
+  DebugLog("WARNIG: remote file not found in list\n");
+}
+
+void SwooshFrame::AddTextMessagePage(const std::string &title, const std::string &content)
 {
   long flags = wxTE_MULTILINE|wxTE_DONTWRAP|wxTE_RICH2|wxTE_READONLY|wxTE_AUTO_URL;
 
@@ -71,9 +114,30 @@ void SwooshFrame::AddTextPage(const std::string &title, const std::string &conte
 
 void SwooshFrame::SetupContent()
 {
-  wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+  wxBoxSizer *mainSizer = new wxBoxSizer(wxVERTICAL);
+  long notebook_style = wxNB_LEFT;
+  wxListbook *notebook = new wxListbook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, notebook_style);
+  notebook->SetImageList(imageList);
+  mainSizer->Add(notebook, wxSizerFlags(5).Expand().Border(wxALL));
+
+  wxPanel *textMessagesPanel = new wxPanel(notebook, wxID_ANY);
+  SetupTextMessagesPanel(textMessagesPanel);
+  notebook->AddPage(textMessagesPanel, "Messages", true, 0);
+
+  wxPanel *fileMessagesPanel = new wxPanel(notebook, wxID_ANY);
+  SetupFileMessagesPanel(fileMessagesPanel);
+  notebook->AddPage(fileMessagesPanel, "Files", false, 1);
+
+  this->SetSizer(mainSizer);
+  mainSizer->SetSizeHints(this);
+}
+
+void SwooshFrame::SetupTextMessagesPanel(wxWindow *parent)
+{
+  wxBoxSizer *mainSizer = new wxBoxSizer(wxVERTICAL);
+
   long splitterStyle = wxSP_LIVE_UPDATE|wxSP_3DSASH|wxSP_3D;
-  wxSplitterWindow *splitter = new wxSplitterWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, splitterStyle);
+  wxSplitterWindow *splitter = new wxSplitterWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, splitterStyle);
   splitter->SetSashGravity(0.5);
   splitter->SetMinimumPaneSize(80);
   mainSizer->Add(splitter, wxSizerFlags(1).Expand().Border(0));
@@ -81,6 +145,7 @@ void SwooshFrame::SetupContent()
   // top panel
   wxPanel *topPanel = new wxPanel(splitter, wxID_ANY);
   wxBoxSizer *topSizer = new wxBoxSizer(wxVERTICAL);
+
   long notebook_style = (
     wxAUI_NB_TOP |
     wxAUI_NB_TAB_MOVE |
@@ -89,12 +154,17 @@ void SwooshFrame::SetupContent()
     wxAUI_NB_MIDDLE_CLICK_CLOSE
   );
   notebook = new wxAuiNotebook(topPanel, wxID_ANY, wxDefaultPosition, wxDefaultSize, notebook_style);
-  topSizer->Add(notebook, wxSizerFlags(5).Expand().Border(wxALL));
+  topSizer->Add(notebook, wxSizerFlags(1).Expand().Border(wxALL));
+
   topPanel->SetSizer(topSizer);
 
   // bottom panel
   wxPanel *bottomPanel = new wxPanel(splitter, wxID_ANY);
   wxBoxSizer *bottomSizer = new wxBoxSizer(wxVERTICAL);
+
+  wxStaticText *sendLabel = new wxStaticText(bottomPanel, wxID_ANY, "Text to send:");
+  bottomSizer->Add(sendLabel, wxSizerFlags(0).Expand().Border(wxLEFT|wxRIGHT|wxTOP|wxBOTTOM));
+
   long sendTextStyle = wxTE_MULTILINE|wxTE_DONTWRAP|wxTE_RICH|wxWANTS_CHARS;
   sendText = new wxTextCtrl(bottomPanel, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, sendTextStyle);
   sendText->Bind(wxEVT_KEY_UP, &SwooshFrame::OnSendTextKeyPressed, this);
@@ -102,13 +172,76 @@ void SwooshFrame::SetupContent()
   bottomSizer->Add(sendText, wxSizerFlags(1).Expand().Border(wxLEFT|wxRIGHT|wxBOTTOM));
 
   sendButton = new wxButton(bottomPanel, wxID_ANY, "Send");
-  sendButton->Bind(wxEVT_BUTTON, &SwooshFrame::OnSendClicked, this);
+  sendButton->Bind(wxEVT_BUTTON, &SwooshFrame::OnSendTextClicked, this);
   bottomSizer->Add(sendButton, wxSizerFlags(0).Expand().Border(wxLEFT|wxRIGHT|wxBOTTOM));
-  bottomPanel->SetSizer(bottomSizer);
 
+  bottomPanel->SetSizer(bottomSizer);
   splitter->SplitHorizontally(topPanel, bottomPanel, -100);
-  this->SetSizer(mainSizer);
-  mainSizer->SetSizeHints(this);
+
+  parent->SetSizer(mainSizer);
+  mainSizer->SetSizeHints(parent);
+}
+
+void SwooshFrame::SetupFileMessagesPanel(wxWindow *parent)
+{
+  wxBoxSizer *mainSizer = new wxBoxSizer(wxVERTICAL);
+
+  long splitterStyle = wxSP_LIVE_UPDATE|wxSP_3DSASH|wxSP_3D;
+  wxSplitterWindow *splitter = new wxSplitterWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, splitterStyle);
+  splitter->SetSashGravity(0.5);
+  splitter->SetMinimumPaneSize(80);
+  mainSizer->Add(splitter, wxSizerFlags(1).Expand().Border(0));
+
+  // top panel
+  wxPanel *topPanel = new wxPanel(splitter, wxID_ANY);
+  wxBoxSizer *topSizer = new wxBoxSizer(wxVERTICAL);
+
+  wxStaticText *receiveLabel = new wxStaticText(topPanel, wxID_ANY, "Receiving:");
+  topSizer->Add(receiveLabel, wxSizerFlags(0).Expand().Border(wxLEFT|wxRIGHT|wxTOP));
+
+  remoteFileList = new wxDataViewListCtrl(topPanel, wxID_ANY);
+  remoteFileList->AppendTextColumn("Type", wxDATAVIEW_CELL_INERT, 40, wxALIGN_CENTER);
+  remoteFileList->AppendTextColumn("Name", wxDATAVIEW_CELL_INERT, 130);
+  remoteFileList->AppendTextColumn("Download to", wxDATAVIEW_CELL_INERT, 200);
+  remoteFileList->AppendProgressColumn("Download progress", wxDATAVIEW_CELL_INERT);
+  remoteFileList->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, &SwooshFrame::OnRemoteFileActivated, this);
+  topSizer->Add(remoteFileList, wxSizerFlags(1).Expand().Border(wxALL));
+
+  topPanel->SetSizer(topSizer);
+
+  // bottom panel
+  wxPanel *bottomPanel = new wxPanel(splitter, wxID_ANY);
+  wxBoxSizer *bottomSizer = new wxBoxSizer(wxVERTICAL);
+
+  wxStaticText *sendLabel = new wxStaticText(bottomPanel, wxID_ANY, "Sending:");
+  bottomSizer->Add(sendLabel, wxSizerFlags(0).Expand().Border(wxLEFT|wxRIGHT|wxTOP));
+
+  localFileList = new wxDataViewListCtrl(bottomPanel, wxID_ANY);
+  localFileList->AppendTextColumn("Type", wxDATAVIEW_CELL_INERT, 40, wxALIGN_CENTER);
+  localFileList->AppendTextColumn("Name", wxDATAVIEW_CELL_INERT, 130);
+  localFileList->AppendTextColumn("Location", wxDATAVIEW_CELL_INERT);
+  bottomSizer->Add(localFileList, wxSizerFlags(1).Expand().Border(wxALL));
+
+  wxBoxSizer *buttonsSizer = new wxBoxSizer(wxHORIZONTAL);
+  buttonsSizer->AddStretchSpacer();
+
+  wxButton *addSendFileButton = new wxButton(bottomPanel, wxID_ANY, "Add File");
+  addSendFileButton->Bind(wxEVT_BUTTON, &SwooshFrame::OnAddSendFileClicked, this);
+  buttonsSizer->Add(addSendFileButton, wxSizerFlags(0).Expand().Border(wxRIGHT));
+
+#if 0
+  wxButton *addSendDirButton = new wxButton(bottomPanel, wxID_ANY, "Add Directory");
+  addSendDirButton->Bind(wxEVT_BUTTON, &SwooshFrame::OnAddSendDirClicked, this);
+  buttonsSizer->Add(addSendDirButton, wxSizerFlags(0).Expand().Border(0));
+#endif
+
+  bottomSizer->Add(buttonsSizer, wxSizerFlags(0).Expand().Border(wxLEFT|wxRIGHT|wxBOTTOM));
+
+  bottomPanel->SetSizer(bottomSizer);
+  splitter->SplitHorizontally(topPanel, bottomPanel, -100);
+
+  parent->SetSizer(mainSizer);
+  mainSizer->SetSizeHints(parent);
 }
 
 void SwooshFrame::SetupMenu()
@@ -145,7 +278,7 @@ void SwooshFrame::OnAbout(wxCommandEvent &event)
   dlg.ShowModal();
 }
 
-void SwooshFrame::OnSendClicked(wxCommandEvent &event)
+void SwooshFrame::OnSendTextClicked(wxCommandEvent &event)
 {
   SendTextMessage();
 }
@@ -177,20 +310,62 @@ void SwooshFrame::OnNetNotify(const std::string &message)
   });
 }
 
-void SwooshFrame::OnNetReceivedData(SwooshData *data, const std::string &host, int port)
+void SwooshFrame::OnNetReceivedData(SwooshData *data)
 {
   // text
   SwooshTextData *text = dynamic_cast<SwooshTextData *>(data);
   if (text) {
-    std::string source = host;
     std::string message = text->GetText();
-    wxGetApp().CallAfter([this, source, message] {
-      AddTextPage(source, message);
+    wxGetApp().CallAfter([this, message] {
+      AddTextMessagePage("Message", message);
+    });
+    delete text;
+    return;
+  }
+
+  // file
+  SwooshFileData *file = dynamic_cast<SwooshFileData *>(data);
+  if (file) {
+    wxGetApp().CallAfter([this, file] {
+      AddRemoteFile(file);
     });
     return;
   }
 
-  DebugLog("WARNING: ignoring message of unknown type");
+  DebugLog("WARNING: ignoring message with unknown type\n");
+  delete data;
+}
+
+void SwooshFrame::OnNetDataDownloading(SwooshData *data, double progress)
+{
+  auto it = remoteFileDataItem.find(data);
+  if (it == remoteFileDataItem.end()) {
+    DebugLog("ERROR: can't find downloaded data item\n");
+    return;
+  }
+
+  wxDataViewItem &item = it->second;
+  wxGetApp().CallAfter([this, item, progress] {
+    remoteFileList->GetStore()->SetValue(wxVariant((int)(progress*100)), item, 3);
+    remoteFileList->Refresh();
+  });
+}
+
+void SwooshFrame::OnNetDataDownloaded(SwooshData *data, bool success)
+{
+  auto it = remoteFileDataItem.find(data);
+  if (it == remoteFileDataItem.end()) {
+    DebugLog("ERROR: can't find downloaded data item\n");
+    return;
+  }
+
+  wxDataViewItem &item = it->second;
+  wxGetApp().CallAfter([this, item, success] {
+    if (success) {
+      remoteFileList->GetStore()->SetValue(wxVariant(100), item, 3);
+      remoteFileList->Refresh();
+    }
+  });
 }
 
 void SwooshFrame::OnUrlClicked(wxTextUrlEvent &event)
@@ -222,4 +397,52 @@ void SwooshFrame::OnSendTextKeyPressed(wxKeyEvent &event)
     return;
   }
   event.Skip();
+}
+
+void SwooshFrame::OnAddSendFileClicked(wxCommandEvent &event)
+{
+  wxFileDialog openFileDialog(this, "Select file to send", "", "", "All files|*.*", wxFD_OPEN|wxFD_FILE_MUST_EXIST);
+  if (openFileDialog.ShowModal() == wxID_CANCEL)
+    return;
+
+  SendFile(openFileDialog.GetPath().ToStdString());
+}
+
+void SwooshFrame::OnAddSendDirClicked(wxCommandEvent &event)
+{
+  wxDirDialog openDirDialog(this, "Select directory to send", "", wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+  if (openDirDialog.ShowModal() == wxID_CANCEL)
+    return;
+
+#if 0
+  auto path = openDirDialog.GetPath();
+  auto filename = openDirDialog.GetName();
+
+  wxVector<wxVariant> data;
+  data.push_back(wxVariant("dir"));
+  data.push_back(wxVariant(GetPathFilename(path)));
+  data.push_back(wxVariant(path));
+  data.push_back(wxVariant(0));
+  localFileList->AppendItem(data);
+#endif
+}
+
+void SwooshFrame::OnRemoteFileActivated(wxDataViewEvent &event)
+{
+  auto item = event.GetItem();
+  auto file = (SwooshFileData *) remoteFileList->GetItemData(item);
+
+  wxVariant val;
+  remoteFileList->GetStore()->GetValue(val, item, 2);
+  auto local_path = val.GetString();
+  if (local_path.IsEmpty()) {
+    wxFileDialog saveFileDialog(this, "Download to", "", file->GetFileName(), "All files|*.*", wxFD_SAVE);
+    if (saveFileDialog.ShowModal() == wxID_CANCEL)
+      return;
+    local_path = saveFileDialog.GetPath();
+    remoteFileList->GetStore()->SetValue(wxVariant(local_path), item, 2);
+    remoteFileList->Refresh();
+  }
+  
+  net.ReceiveDataContent(file, local_path.ToStdString());
 }

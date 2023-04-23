@@ -11,4 +11,8 @@ public:
 
 wxDECLARE_APP(SwooshApp);
 
+wxString GetPathFilename(wxString path);
+std::string GetPathFilename(std::string path);
+int ReadFileSize(std::string file_name, uint32_t *file_size);
+
 #endif /* SWOOSH_APP_H_FILE */

@@ -47,8 +47,11 @@ int net_send_data(struct net_socket *sock, const void *data, size_t len);
 int net_recv_u32(struct net_socket *sock, uint32_t *data_len);
 int net_recv_data(struct net_socket *sock, void *data, size_t len);
 
-// extract message id from beacon
+// extract information from beacon
 uint32_t net_get_beacon_message_id(struct net_msg_beacon *beacon);
+
+// free a beacon
+void net_free_beacon(struct net_msg_beacon *beacon);
 
 // close a socket
 void net_close_socket(struct net_socket *sock);

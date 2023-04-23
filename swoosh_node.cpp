@@ -38,20 +38,32 @@ int SwooshNode::OnBeaconReceived(net_msg_beacon *beacon, void *user_data)
 
   SwooshNode *swoosh_node = (SwooshNode *) user_data;
   std::thread receiver_thread{[swoosh_node, beacon] {
-    uint32_t message_id = net_get_beacon_message_id(beacon);
     struct net_socket *sock = net_connect_to_beacon(beacon);
     if (! sock) {
+      net_free_beacon(beacon);
       return;
     }
 
+    uint32_t message_id = net_get_beacon_message_id(beacon);
+
     // send request for message with our ID
     if (net_send_u32(sock, message_id) != 0) {
+      DebugLog("ERROR: can't send message id in request\n");
       net_close_socket(sock);
+      net_free_beacon(beacon);
+      return;
+    }
+
+    // send request for message information
+    if (net_send_u32(sock, REQUEST_HEAD) != 0) {
+      DebugLog("ERROR: can't send info in request\n");
+      net_close_socket(sock);
+      net_free_beacon(beacon);
       return;
     }
 
     // read message
-    swoosh_node->ReceiveNetMessage(sock);
+    swoosh_node->RequestMessage(sock, beacon);
     net_close_socket(sock);
   }};
   receiver_thread.detach();
@@ -62,7 +74,7 @@ void SwooshNode::OnMessageRequested(net_socket *sock, void *user_data)
 {
   SwooshNode *swoosh_node = (SwooshNode *) user_data;
   std::thread message_thread{[swoosh_node, sock] {
-    swoosh_node->SendNetMessage(sock);
+    swoosh_node->HandleMessageRequest(sock);
   }};
   message_thread.detach();
 }
@@ -90,7 +102,7 @@ void SwooshNode::StartTCPServer()
 void SwooshNode::StartDataCollector()
 {
   std::thread data_collector_thread{[this] {
-    while (true) {
+    while (running) {
       Sleep(5000);
       uint64_t cur_time = GetTime(0);
       data_store.RemoveExpired(cur_time);
@@ -99,7 +111,7 @@ void SwooshNode::StartDataCollector()
   data_collector_thread.detach();
 }
 
-void SwooshNode::SendData(SwooshData *data)
+void SwooshNode::SendDataBeacon(SwooshData *data)
 {
   uint32_t message_id = next_message_id++;
   data_store.Store(message_id, data);
@@ -110,12 +122,20 @@ void SwooshNode::SendData(SwooshData *data)
   pre_send_thread.detach();
 }
 
-void SwooshNode::SendNetMessage(net_socket *sock)
+void SwooshNode::HandleMessageRequest(net_socket *sock)
 {
   // read message id
   uint32_t message_id = 0;
   if (net_recv_u32(sock, &message_id) < 0) {
     DebugLog("ERROR: can't read message id\n");
+    net_close_socket(sock);
+    return;
+  }
+
+  // read request type
+  uint32_t request_type = 0;
+  if (net_recv_u32(sock, &request_type) < 0) {
+    DebugLog("ERROR: can't read request type\n");
     net_close_socket(sock);
     return;
   }
@@ -129,12 +149,19 @@ void SwooshNode::SendNetMessage(net_socket *sock)
   }
 
   // send data
-  data->Send(sock);
+  switch (request_type) {
+  case REQUEST_HEAD: data->SendContentHead(sock); break;
+  case REQUEST_BODY: data->SendContentBody(sock); break;
+  default:
+    DebugLog("ERROR: unknown request type: %u\n", request_type);
+    break;
+  }
+  
   net_close_socket(sock);
   data_store.Release(message_id);
 }
 
-void SwooshNode::ReceiveNetMessage(net_socket *sock)
+void SwooshNode::RequestMessage(net_socket *sock, net_msg_beacon *beacon)
 {
   // read data type
   uint32_t data_type_id;
@@ -144,11 +171,28 @@ void SwooshNode::ReceiveNetMessage(net_socket *sock)
   }
 
   // read message
-  SwooshData *data = SwooshData::ReceiveData(sock, data_type_id);
+  SwooshData *data = SwooshData::ReceiveData(beacon, data_type_id, sock);
+  if (!data) {
+    DebugLog("ERROR: can't read message response\n", data_type_id);
+    return;
+  }
 
   // show message on UI
   if (data->IsGood()) {
-    client.OnNetReceivedData(data, "Message", 0);
+    client.OnNetReceivedData(data);
+  } else {
+    delete data;
   }
-  delete data;
+}
+
+void SwooshNode::ReceiveDataContent(SwooshData *data, std::string local_path)
+{
+  std::thread data_downloader_thread{[this, data, local_path] {
+    client.OnNetDataDownloading(data, 0.0);
+    bool success = data->Download(local_path, [this, data] (double progress) {
+      client.OnNetDataDownloading(data, progress);
+    });
+    client.OnNetDataDownloaded(data, success);
+  }};
+  data_downloader_thread.detach();
 }

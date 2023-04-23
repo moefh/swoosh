@@ -10,9 +10,16 @@
 #include "swoosh_data_store.h"
 #include "network.h"
 
+enum {
+  REQUEST_HEAD = 0,
+  REQUEST_BODY = 1,
+};
+
 class SwooshNodeClient {
 public:
-  virtual void OnNetReceivedData(SwooshData *data, const std::string &host, int port) = 0;
+  virtual void OnNetReceivedData(SwooshData *data) = 0;
+  virtual void OnNetDataDownloading(SwooshData *data, double progress) = 0;
+  virtual void OnNetDataDownloaded(SwooshData *data, bool success) = 0;
   virtual void OnNetNotify(const std::string &message) = 0;
 };
 
@@ -31,8 +38,10 @@ private:
   static int OnBeaconReceived(net_msg_beacon *beacon, void *user_data);
   static void OnMessageRequested(net_socket *sock, void *user_data);
   static uint32_t MakeClientId();
-  static uint64_t GetTime(uint32_t msec_in_future);
   static void Sleep(uint32_t msec);
+
+  void HandleMessageRequest(net_socket *sock);
+  void RequestMessage(net_socket *sock, net_msg_beacon *beacon);
 
 public:
   SwooshNode(SwooshNodeClient &client, int server_udp_port, int server_tcp_port, bool use_ipv6) : client(client) {
@@ -45,10 +54,10 @@ public:
     StartDataCollector();
   }
   void Stop() { running = false; }
-  void SendData(SwooshData *data);
-  void SendText(const std::string &text) { SendData(new SwooshTextData(GetTime(5000), text)); }
-  void SendNetMessage(net_socket *sock);
-  void ReceiveNetMessage(net_socket *sock);
+  void SendDataBeacon(SwooshData *data);
+  void ReceiveDataContent(SwooshData *data, std::string local_path);
+
+  static uint64_t GetTime(uint32_t msec_in_future);
 };
 
 #endif /* SWOOSH_NODE_H_FILE */

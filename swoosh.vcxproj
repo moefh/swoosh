@@ -151,6 +151,10 @@
     <ClCompile Include="swoosh_node.cpp" />
     <ClCompile Include="util.c" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="data\folder.xpm" />
+    <None Include="data\write.xpm" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

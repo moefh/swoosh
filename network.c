@@ -20,6 +20,9 @@
 #include <ws2tcpip.h>
 #define close closesocket
 typedef SOCKET sock_type;
+#define SHUT_RD   SD_RECEIVE
+#define SHUT_WR   SD_SEND
+#define SHUT_RDWR SD_BOTH
 #elif defined(__WIN32__)
 #define SETUP_WINSOCK 1
 # include <winsock2.h>
@@ -27,6 +30,9 @@ typedef SOCKET sock_type;
 #include <ws2tcpip.h>
 #define close closesocket
 typedef SOCKET sock_type;
+#define SHUT_RD   SD_RECEIVE
+#define SHUT_WR   SD_SEND
+#define SHUT_RDWR SD_BOTH
 const char *inet_ntop(int, const void *, char *, size_t);
 #else
 #include <unistd.h>
@@ -38,9 +44,9 @@ typedef int sock_type;
 #endif
 
 #define BEACON_PACKET_MAX_SIZE   256
-#define BEACON_PACKET_SIZE       20
+#define BEACON_PACKET_SIZE       16
 #define BEACON_MAGIC             NET_MAKE_MAGIC('S', 'w', 'o', 'o')
-#define BEACON_VERSION           0x00000002
+#define BEACON_VERSION           0x00000003
 
 #define TCP_BACKLOG         10
 #define TCP_LISTEN_TIME_MS  5000
@@ -58,9 +64,8 @@ struct net_socket {
 
 struct net_msg_beacon {
   int      net_family;
-  char     net_host[256];
-  char     net_port[16];
-  uint32_t client_id;
+  char     net_host[INET6_ADDRSTRLEN];
+  uint32_t net_port;
   uint32_t message_id;
 };
 
@@ -214,8 +219,24 @@ int net_setup(uint32_t client_id, int udp_server_port, int tcp_server_port, int 
 void net_close_socket(struct net_socket *sock)
 {
   DebugLog("========== FREEING SOCKET %p\n", sock);
+
+  shutdown(sock->sock, SHUT_WR);
+  while (1) {
+    char data;
+    int ret = recv(sock->sock, &data, 1, 0);
+    if (ret < 0 && errno == EINTR) continue;
+    break;
+  }
+
   close(sock->sock);
   free(sock);
+}
+
+void net_free_beacon(struct net_msg_beacon *beacon)
+{
+  if (beacon == NULL) return;
+  DebugLog("======================= FREE BACON %p\n", beacon);
+  free(beacon);
 }
 
 int net_send_data(struct net_socket *sock, const void *data, size_t len)
@@ -224,8 +245,8 @@ int net_send_data(struct net_socket *sock, const void *data, size_t len)
   const char *data_left = data;
   while (len_left > 0) {
     int done = send(sock->sock, data_left, (int) len_left, 0);
-    if (done < 0) {
-      if (errno == EINTR) continue;
+    if (done <= 0) {
+      if (done < 0 && errno == EINTR) continue;
       return -1;
     }
     len_left -= done;
@@ -247,8 +268,8 @@ int net_recv_data(struct net_socket *sock, void *data, size_t len)
   char *data_left = data;
   while (len_left > 0) {
     int done = recv(sock->sock, data_left, (int) len_left, 0);
-    if (done < 0) {
-      if (errno == EINTR) continue;
+    if (done <= 0) {
+      if (done < 0 && errno == EINTR) continue;
       return -1;
     }
     len_left -= done;
@@ -288,11 +309,10 @@ struct net_msg_beacon *make_net_beacon(unsigned char *data, size_t data_len, str
     DebugLog("ERROR: beacon data is too small (%d bytes)\n", (int) data_len);
     return NULL;
   }
-  uint32_t beacon_magic = unpack_u32(data, 0);
-  uint32_t beacon_version = unpack_u32(data, 4);
-  uint32_t net_port = unpack_u32(data, 8);
-  uint32_t client_id = unpack_u32(data, 12);
-  uint32_t message_id = unpack_u32(data, 16);
+  uint32_t beacon_magic   = unpack_u32(data,  0);
+  uint32_t beacon_version = unpack_u32(data,  4);
+  uint32_t net_port       = unpack_u32(data,  8);
+  uint32_t message_id     = unpack_u32(data, 12);
 
   if (beacon_magic != BEACON_MAGIC) {
     DebugLog("ERROR: invalid beacon magic: 0x%04x\n", beacon_magic);
@@ -312,8 +332,7 @@ struct net_msg_beacon *make_net_beacon(unsigned char *data, size_t data_len, str
 
   beacon->net_family = addr->sa_family;
   get_address_host(addr, beacon->net_host, sizeof(beacon->net_host));
-  snprintf(beacon->net_port, sizeof(beacon->net_port), "%u", net_port);
-  beacon->client_id = client_id;
+  beacon->net_port = net_port;
   beacon->message_id = message_id;
   return beacon;
 }
@@ -401,8 +420,7 @@ int net_send_msg_beacon(uint32_t message_id)
   pack_u32(beacon_data,  0, BEACON_MAGIC);
   pack_u32(beacon_data,  4, BEACON_VERSION);
   pack_u32(beacon_data,  8, config.tcp_server_port);
-  pack_u32(beacon_data, 12, config.client_id);
-  pack_u32(beacon_data, 16, message_id);
+  pack_u32(beacon_data, 12, message_id);
 
   struct sockaddr_storage addr;
   socklen_t addr_len = 0;
@@ -423,7 +441,7 @@ int net_send_msg_beacon(uint32_t message_id)
 struct net_socket *net_connect_to_beacon(struct net_msg_beacon *beacon)
 {
   struct net_socket *net_socket = NULL;
-  DebugLog("[net_connect_to_beacon] will connect to '%s:%s'\n", beacon->net_host, beacon->net_port);
+  DebugLog("[net_connect_to_beacon] will connect to '%s:%d'\n", beacon->net_host, beacon->net_port);
   sock_type sock = socket(beacon->net_family, SOCK_STREAM, 0);
   if (sock < 0) goto end;
 
@@ -432,8 +450,11 @@ struct net_socket *net_connect_to_beacon(struct net_msg_beacon *beacon)
   hints.ai_family = beacon->net_family;
   hints.ai_socktype = SOCK_STREAM;
 
+  char net_port[32];
+  snprintf(net_port, sizeof(net_port), "%d", beacon->net_port);
+
   struct addrinfo *servinfo;
-  if (getaddrinfo(beacon->net_host, beacon->net_port, &hints, &servinfo) != 0) {
+  if (getaddrinfo(beacon->net_host, net_port, &hints, &servinfo) != 0) {
     goto end;
   }
 
@@ -457,8 +478,6 @@ struct net_socket *net_connect_to_beacon(struct net_msg_beacon *beacon)
   freeaddrinfo(servinfo);
 
  end:
-  DebugLog("======================= FREE BACON %p\n", beacon);
-  free(beacon);   // mmm, free bacon...
   if (net_socket == NULL) {
     DebugLog("[net_connect_to_beacon] connection failed\n");
   }
