@@ -1,4 +1,4 @@
-
+#include "targetver.h"
 #include "swoosh_node.h"
 
 #include <vector>
@@ -38,33 +38,7 @@ int SwooshNode::OnBeaconReceived(net_msg_beacon *beacon, void *user_data)
 
   SwooshNode *swoosh_node = (SwooshNode *) user_data;
   std::thread receiver_thread{[swoosh_node, beacon] {
-    struct net_socket *sock = net_connect_to_beacon(beacon);
-    if (! sock) {
-      net_free_beacon(beacon);
-      return;
-    }
-
-    uint32_t message_id = net_get_beacon_message_id(beacon);
-
-    // send request for message with our ID
-    if (net_send_u32(sock, message_id) != 0) {
-      DebugLog("ERROR: can't send message id in request\n");
-      net_close_socket(sock);
-      net_free_beacon(beacon);
-      return;
-    }
-
-    // send request for message information
-    if (net_send_u32(sock, REQUEST_HEAD) != 0) {
-      DebugLog("ERROR: can't send info in request\n");
-      net_close_socket(sock);
-      net_free_beacon(beacon);
-      return;
-    }
-
-    // read message
-    swoosh_node->RequestMessage(sock, beacon);
-    net_close_socket(sock);
+    swoosh_node->RequestMessage(beacon);
   }};
   receiver_thread.detach();
   return 0;
@@ -104,26 +78,18 @@ void SwooshNode::StartDataCollector()
   std::thread data_collector_thread{[this] {
     while (running) {
       Sleep(5000);
-      uint64_t cur_time = GetTime(0);
-      local_data_store.RemoveExpired(cur_time);
+      local_data_store.RemoveExpired(GetTime(0));
     }
   }};
   data_collector_thread.detach();
 }
 
-void SwooshNode::SendDataBeacon(SwooshLocalData *data)
+void SwooshNode::SendDataBeacon(uint32_t message_id)
 {
-  uint32_t message_id = data->GetMessageId();
-  if (message_id == 0) {
-    message_id = next_message_id++;
-    data->SetMessageId(message_id);
-    local_data_store.Store(data);
-  }
-
-  std::thread pre_send_thread{[message_id] {
+  std::thread send_beacon_thread{[message_id] {
     net_send_msg_beacon(message_id);
   }};
-  pre_send_thread.detach();
+  send_beacon_thread.detach();
 }
 
 void SwooshNode::HandleMessageRequest(net_socket *sock)
@@ -154,30 +120,23 @@ void SwooshNode::HandleMessageRequest(net_socket *sock)
 
   // send data
   switch (request_type) {
-  case REQUEST_HEAD: data->SendContentHead(sock); break;
-  case REQUEST_BODY: data->SendContentBody(sock); break;
+  case SWOOSH_DATA_REQUEST_HEAD: data->SendContentHead(sock); break;
+  case SWOOSH_DATA_REQUEST_BODY: data->SendContentBody(sock); break;
   default:
     DebugLog("ERROR: unknown request type: %u\n", request_type);
     break;
   }
   
-  net_close_socket(sock);
   local_data_store.Release(message_id);
+  net_close_socket(sock);
 }
 
-void SwooshNode::RequestMessage(net_socket *sock, net_msg_beacon *beacon)
+void SwooshNode::RequestMessage(net_msg_beacon *beacon)
 {
-  // read data type
-  uint32_t data_type_id;
-  if (net_recv_u32(sock, &data_type_id) != 0) {
-    DebugLog("ERROR: can't read message type\n");
-    return;
-  }
-
-  // read message
-  SwooshRemoteData *data = SwooshRemoteData::ReceiveData(beacon, data_type_id, sock);
+  SwooshRemoteData *data = SwooshRemoteData::ReceiveData(beacon);
   if (!data) {
-    DebugLog("ERROR: can't read message response\n", data_type_id);
+    DebugLog("ERROR: can't read message response\n");
+    net_free_beacon(beacon);
     return;
   }
 

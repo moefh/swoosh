@@ -1,3 +1,4 @@
+#include "targetver.h"
 #include "swoosh_data_store.h"
 
 void SwooshDataStore::Stop(void)

@@ -5,11 +5,15 @@
 
 #include <cstdint>
 #include <string>
-
 #include <wx/filefn.h>
 
 #include "network.h"
 
+#define SWOOSH_DATA_ALWAYS_VALID ((uint64_t) -1)
+
+// ==========================================================================
+// SwooshLocalData
+// ==========================================================================
 class SwooshLocalData
 {
   friend class SwooshNode;
@@ -26,8 +30,9 @@ protected:
   int SendString(net_socket *sock, const std::string &str);
 
 public:
-  SwooshLocalData(uint64_t valid_until) : message_id(0), valid_until(valid_until), num_refs(0) {}
-
+  SwooshLocalData(uint32_t message_id, uint64_t valid_until)
+    : message_id(message_id), valid_until(valid_until), num_refs(1) {
+  }
   virtual ~SwooshLocalData() = default;
 
   uint32_t GetMessageId() { return message_id; }
@@ -40,6 +45,9 @@ public:
   bool IsExpiredAt(uint64_t time) { return (valid_until != SWOOSH_DATA_ALWAYS_VALID) && (valid_until < time); }
 };
 
+// ==========================================================================
+// SwooshLocalTextData
+// ==========================================================================
 class SwooshLocalTextData : public SwooshLocalData
 {
 protected:
@@ -49,8 +57,8 @@ protected:
   virtual int SendContentBody(net_socket *sock);
 
 public:
-  SwooshLocalTextData(uint64_t valid_until, const std::string &str)
-    : SwooshLocalData(valid_until), text(str) {
+  SwooshLocalTextData(uint32_t message_id, uint64_t valid_until, const std::string &str)
+    : SwooshLocalData(message_id, valid_until), text(str) {
   }
 
   virtual ~SwooshLocalTextData() {}
@@ -58,6 +66,9 @@ public:
   virtual std::string &GetText() { return text; }
 };
 
+// ==========================================================================
+// SwooshLocalFileData
+// ==========================================================================
 class SwooshLocalFileData : public SwooshLocalData
 {
 protected:
@@ -68,7 +79,7 @@ protected:
   virtual int SendContentBody(net_socket *sock);
 
 public:
-  SwooshLocalFileData(uint64_t valid_until, const std::string &file_name);
+  SwooshLocalFileData(uint32_t message_id, uint64_t valid_until, const std::string &file_name);
 
   virtual ~SwooshLocalFileData() {}
 

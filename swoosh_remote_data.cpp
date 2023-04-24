@@ -1,3 +1,4 @@
+#include "targetver.h"
 #include "swoosh_remote_data.h"
 
 #include <vector>
@@ -6,19 +7,55 @@
 #include <memory>
 #include <fstream>
 
-#define MAX_TEXT_SIZE      (512*1024*1024)
+#include "util.h"
+
+#define MAX_TEXT_SIZE      (1024*1024)
 #define MAX_FILENAME_SIZE  (128)
 
-SwooshRemoteData *SwooshRemoteData::ReceiveData(net_msg_beacon *beacon, uint32_t data_type_id, net_socket *sock)
+// ==========================================================================
+// SwooshRemoteData
+// ==========================================================================
+
+SwooshRemoteData *SwooshRemoteData::ReceiveData(net_msg_beacon *beacon)
 {
+  SwooshRemoteData *data = nullptr;
+  struct net_socket *sock = net_connect_to_beacon(beacon);
+  if (!sock) {
+    return nullptr;
+  }
+
+  // send request for message with our ID
+  uint32_t message_id = net_get_beacon_message_id(beacon);
+  if (net_send_u32(sock, message_id) != 0) {
+    DebugLog("ERROR: can't send message id in request\n");
+    goto end;
+  }
+
+  // send request for message information
+  if (net_send_u32(sock, SWOOSH_DATA_REQUEST_HEAD) != 0) {
+    DebugLog("ERROR: can't send info in request\n");
+    goto end;
+  }
+
+  // read data type
+  uint32_t data_type_id;
+  if (net_recv_u32(sock, &data_type_id) != 0) {
+    DebugLog("ERROR: can't read message type\n");
+    goto end;
+  }
+
   switch (data_type_id) {
-  case SWOOSH_DATA_TEXT: return new SwooshRemoteTextData(beacon, sock);
-  case SWOOSH_DATA_FILE: return new SwooshRemoteFileData(beacon, sock);
+  case SWOOSH_DATA_TEXT: data = new SwooshRemoteTextData(beacon, sock); break;
+  case SWOOSH_DATA_FILE: data = new SwooshRemoteFileData(beacon, sock); break;
 
   default:
     DebugLog("ERROR: unknown message type id: %u (0x%x)\n", data_type_id, data_type_id);
-    return nullptr;
+    break;
   }
+
+end:
+  net_close_socket(sock);
+  return data;
 }
 
 std::string *SwooshRemoteData::ReceiveString(net_socket *sock, size_t max_size)
@@ -46,11 +83,15 @@ std::string *SwooshRemoteData::ReceiveString(net_socket *sock, size_t max_size)
   return new std::string(data.begin(), data.end());
 }
 
+// ==========================================================================
+// SwooshRemoteTextData
+// ==========================================================================
+
 SwooshRemoteTextData::SwooshRemoteTextData(net_msg_beacon *beacon, net_socket *sock)
-  : SwooshRemoteData(beacon), is_good(false), text("")
+  : SwooshRemoteData(beacon), text("")
 {
   // request head
-  if (net_send_u32(sock, REQUEST_HEAD) != 0) {
+  if (net_send_u32(sock, SWOOSH_DATA_REQUEST_HEAD) != 0) {
     DebugLog("ERROR: can't send request type\n");
     return;
   }
@@ -73,12 +114,15 @@ bool SwooshRemoteTextData::Download(std::string local_path, std::function<void(d
   return false;
 }
 
+// ==========================================================================
+// SwooshRemoteFileData
+// ==========================================================================
 
 SwooshRemoteFileData::SwooshRemoteFileData(net_msg_beacon *beacon, net_socket *sock)
-  : SwooshRemoteData(beacon), is_good(false), file_name(""), file_size(0)
+  : SwooshRemoteData(beacon), file_name(""), file_size(0)
 {
   // request info
-  if (net_send_u32(sock, REQUEST_HEAD) != 0) {
+  if (net_send_u32(sock, SWOOSH_DATA_REQUEST_HEAD) != 0) {
     DebugLog("ERROR: can't send request type\n");
     return;
   }
@@ -120,7 +164,7 @@ bool SwooshRemoteFileData::Download(std::string local_path, std::function<void(d
   }
 
   // request body
-  if (net_send_u32(sock, REQUEST_BODY) != 0) {
+  if (net_send_u32(sock, SWOOSH_DATA_REQUEST_BODY) != 0) {
     DebugLog("ERROR: can't send request type\n");
     goto end;
   }

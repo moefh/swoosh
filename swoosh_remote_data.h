@@ -6,50 +6,56 @@
 #include <string>
 #include <functional>
 
+// ==========================================================================
+// SwooshRemoteData
+// ==========================================================================
 class SwooshRemoteData
 {
   friend class SwooshNode;
 
 protected:
   net_msg_beacon *beacon;
+  bool is_good;
 
-  static SwooshRemoteData *ReceiveData(net_msg_beacon *beacon, uint32_t type_id, net_socket *sock);
+  static SwooshRemoteData *ReceiveData(net_msg_beacon *beacon);
+  static std::string *ReceiveString(net_socket *sock, size_t max_size);
+
   virtual bool Download(std::string local_path, std::function<void(double)> progress) = 0;
-  std::string *ReceiveString(net_socket *sock, size_t max_size);
 
 public:
-  SwooshRemoteData(net_msg_beacon *beacon) : beacon(beacon) {}
+  SwooshRemoteData(net_msg_beacon *beacon) : beacon(beacon), is_good(false) {}
   virtual ~SwooshRemoteData() {
     net_free_beacon(beacon);
   }
 
   net_msg_beacon *GetBeacon() { return beacon; }
 
-  virtual bool IsGood() = 0;
+  bool IsGood() { return is_good; };
 };
 
+// ==========================================================================
+// SwooshRemoteTextData
+// ==========================================================================
 class SwooshRemoteTextData : public SwooshRemoteData
 {
 protected:
-  bool is_good;
   std::string text;
 
   virtual bool Download(std::string local_path, std::function<void(double)> progress);
 
 public:
   SwooshRemoteTextData(net_msg_beacon *beacon, net_socket *sock);
+  virtual ~SwooshRemoteTextData() = default;
 
-  virtual ~SwooshRemoteTextData() {}
-
-  virtual bool IsGood() { return is_good; };
   virtual std::string &GetText() { return text; }
-
 };
 
+// ==========================================================================
+// SwooshRemoteFileData
+// ==========================================================================
 class SwooshRemoteFileData : public SwooshRemoteData
 {
 protected:
-  bool is_good;
   std::string file_name;
   uint32_t file_size;
 
@@ -57,10 +63,8 @@ protected:
 
 public:
   SwooshRemoteFileData(net_msg_beacon *beacon, net_socket *sock);
+  virtual ~SwooshRemoteFileData() = default;
 
-  virtual ~SwooshRemoteFileData() {}
-
-  virtual bool IsGood() { return is_good; };
   virtual std::string &GetFileName() { return file_name; }
   virtual uint32_t GetFileSize() { return file_size; }
 };

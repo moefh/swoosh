@@ -1,5 +1,5 @@
-#ifndef SHWOOSH_DATA_STORE_H_FILE
-#define SHWOOSH_DATA_STORE_H_FILE
+#ifndef SWOOSH_DATA_STORE_H_FILE
+#define SWOOSH_DATA_STORE_H_FILE
 
 #include <cstdint>
 #include <map>
@@ -24,4 +24,4 @@ public:
   void RemoveExpired(uint64_t cur_time);
 };
 
-#endif /* SHWOOSH_DATA_STORE_H_FILE */
+#endif /* SWOOSH_DATA_STORE_H_FILE */

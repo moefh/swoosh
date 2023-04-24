@@ -12,10 +12,6 @@ class SwooshFrame : public wxFrame, public SwooshNodeClient
 {
 protected:
   SwooshNode net;
-  virtual void OnNetNotify(const std::string &text);
-  virtual void OnNetReceivedData(SwooshRemoteData *data);
-  virtual void OnNetDataDownloading(SwooshRemoteData *data, double progress);
-  virtual void OnNetDataDownloaded(SwooshRemoteData *data, bool success);
 
   wxImageList *imageList;
   wxFont messageTextFont;
@@ -23,7 +19,7 @@ protected:
   wxTextCtrl *sendText;
   wxButton *sendButton;
 
-  std::map<SwooshRemoteData *, wxDataViewItem> remoteFileDataItem;
+  std::map<SwooshRemoteData *, wxDataViewItem> remoteFileDataItems;
   wxDataViewListCtrl *remoteFileList;
   wxDataViewListCtrl *localFileList;
 
@@ -33,11 +29,10 @@ protected:
   void SetupFileMessagesPanel(wxWindow *parent);
   void SetupStatusBar();
 
-  void AddTextMessagePage(const std::string &title, const std::string &content);
+  void AddTextMessage(const std::string &title, const std::string &content);
   void AddRemoteFile(SwooshRemoteFileData *file);
-
+  void AddLocalFile(std::string file_name);
   void SendTextMessage();
-  void SendFile(std::string file_name);
 
   void OnUrlClicked(wxTextUrlEvent &event);
   void OnSendTextKeyPressed(wxKeyEvent &event);
@@ -50,6 +45,12 @@ protected:
   void OnAbout(wxCommandEvent &event);
   void OnClose(wxCloseEvent &event);
   void OnQuit(wxCommandEvent &event);
+
+  // from SwooshNodeClient -- these handlers will be called from other threads:
+  virtual void OnNetNotify(const std::string &text);
+  virtual void OnNetReceivedData(SwooshRemoteData *data);
+  virtual void OnNetDataDownloading(SwooshRemoteData *data, double progress);
+  virtual void OnNetDataDownloaded(SwooshRemoteData *data, bool success);
 
 public:
   SwooshFrame();

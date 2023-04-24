@@ -25,7 +25,7 @@ typedef int (*net_beacon_callback)(struct net_msg_beacon *beacon, void *user_dat
 typedef void (*net_connect_callback)(struct net_socket *sock, void *user_data);
 
 // setup network
-int net_setup(uint32_t client_id, int server_udp_port, int server_tcp_port, int use_ipv6);
+int net_setup(int server_udp_port, int server_tcp_port, int use_ipv6);
 
 // listen to UDP broadcast beacons and run the callback for each beacon received
 int net_udp_server(net_beacon_callback callback, void *user_data);
@@ -47,11 +47,9 @@ int net_send_data(struct net_socket *sock, const void *data, size_t len);
 int net_recv_u32(struct net_socket *sock, uint32_t *data_len);
 int net_recv_data(struct net_socket *sock, void *data, size_t len);
 
-// extract information from beacon
+// beacon functions
 uint32_t net_get_beacon_message_id(struct net_msg_beacon *beacon);
 int net_beacons_are_equal(struct net_msg_beacon *beacon1, struct net_msg_beacon *beacon2);
-
-// free a beacon
 void net_free_beacon(struct net_msg_beacon *beacon);
 
 // close a socket

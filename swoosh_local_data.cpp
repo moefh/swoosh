@@ -1,3 +1,4 @@
+#include "swoosh_frame.h"
 #include "swoosh_local_data.h"
 
 #include <vector>
@@ -7,6 +8,11 @@
 #include <fstream>
 
 #include "swoosh_app.h"
+#include "util.h"
+
+// ==========================================================================
+// SwooshLocalData
+// ==========================================================================
 
 int SwooshLocalData::SendString(net_socket *sock, const std::string &str)
 {
@@ -25,6 +31,10 @@ int SwooshLocalData::SendString(net_socket *sock, const std::string &str)
 
   return 0;
 }
+
+// ==========================================================================
+// SwooshLocalTextData
+// ==========================================================================
 
 int SwooshLocalTextData::SendContentHead(net_socket *sock)
 {
@@ -48,8 +58,12 @@ int SwooshLocalTextData::SendContentBody(net_socket *sock)
   return 0;
 }
 
-SwooshLocalFileData::SwooshLocalFileData(uint64_t valid_until, const std::string &file_name)
-  : SwooshLocalData(valid_until), file_name(file_name), file_size(0)
+// ==========================================================================
+// SwooshLocalFileData
+// ==========================================================================
+
+SwooshLocalFileData::SwooshLocalFileData(uint32_t message_id, uint64_t valid_until, const std::string &file_name)
+  : SwooshLocalData(message_id, valid_until), file_name(file_name), file_size(0)
 {
   ReadFileSize(file_name, &file_size);
 };

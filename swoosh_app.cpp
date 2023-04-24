@@ -1,7 +1,7 @@
-
+#include "targetver.h"
 #include "swoosh_app.h"
-#include "swoosh_frame.h"
 
+#include "swoosh_frame.h"
 #include "util.h"
 
 wxIMPLEMENT_APP(SwooshApp);

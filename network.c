@@ -1,3 +1,6 @@
+#include "targetver.h"
+#include "network.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,7 +10,6 @@
 #include <time.h>
 #include <sys/types.h>
 
-#include "network.h"
 #include "util.h"
 
 #define DebugLog(...) do {} while (0)
@@ -52,7 +54,6 @@ typedef int sock_type;
 #define TCP_LISTEN_TIME_MS  5000
 
 struct net_config {
-  uint32_t client_id;
   int      udp_server_port;
   int      tcp_server_port;
   int      use_ipv6;
@@ -200,9 +201,8 @@ static sock_type open_udp_broadcast_socket(int port, int use_ipv6, struct sockad
   return sock;
 }
 
-int net_setup(uint32_t client_id, int udp_server_port, int tcp_server_port, int use_ipv6)
+int net_setup(int udp_server_port, int tcp_server_port, int use_ipv6)
 {
-  config.client_id = client_id;
   config.udp_server_port = udp_server_port;
   config.tcp_server_port = tcp_server_port;
   config.use_ipv6 = use_ipv6;

@@ -1,16 +1,11 @@
 #ifndef SWOOSH_DATA_H_FILE
 #define SWOOSH_DATA_H_FILE
 
-#include <cstdint>
-
 #include "network.h"
-#include "util.h"
-
-#define SWOOSH_DATA_ALWAYS_VALID ((uint64_t) -1)
 
 enum {
-  REQUEST_HEAD = 0,
-  REQUEST_BODY = 1,
+  SWOOSH_DATA_REQUEST_HEAD = 0,
+  SWOOSH_DATA_REQUEST_BODY = 1,
 };
 
 enum {
