@@ -13,9 +13,9 @@ class SwooshFrame : public wxFrame, public SwooshNodeClient
 protected:
   SwooshNode net;
   virtual void OnNetNotify(const std::string &text);
-  virtual void OnNetReceivedData(SwooshData *data);
-  virtual void OnNetDataDownloading(SwooshData *data, double progress);
-  virtual void OnNetDataDownloaded(SwooshData *data, bool success);
+  virtual void OnNetReceivedData(SwooshRemoteData *data);
+  virtual void OnNetDataDownloading(SwooshRemoteData *data, double progress);
+  virtual void OnNetDataDownloaded(SwooshRemoteData *data, bool success);
 
   wxImageList *imageList;
   wxFont messageTextFont;
@@ -23,7 +23,7 @@ protected:
   wxTextCtrl *sendText;
   wxButton *sendButton;
 
-  std::map<SwooshData *, wxDataViewItem> remoteFileDataItem;
+  std::map<SwooshRemoteData *, wxDataViewItem> remoteFileDataItem;
   wxDataViewListCtrl *remoteFileList;
   wxDataViewListCtrl *localFileList;
 
@@ -34,7 +34,7 @@ protected:
   void SetupStatusBar();
 
   void AddTextMessagePage(const std::string &title, const std::string &content);
-  void AddRemoteFile(SwooshFileData *file);
+  void AddRemoteFile(SwooshRemoteFileData *file);
 
   void SendTextMessage();
   void SendFile(std::string file_name);
@@ -42,6 +42,7 @@ protected:
   void OnUrlClicked(wxTextUrlEvent &event);
   void OnSendTextKeyPressed(wxKeyEvent &event);
   void OnSendTextClicked(wxCommandEvent &event);
+  void OnLocalFileActivated(wxDataViewEvent &event);
   void OnRemoteFileActivated(wxDataViewEvent &event);
   void OnAddSendFileClicked(wxCommandEvent &event);
   void OnAddSendDirClicked(wxCommandEvent &event);

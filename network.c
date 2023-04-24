@@ -483,3 +483,12 @@ struct net_socket *net_connect_to_beacon(struct net_msg_beacon *beacon)
   }
   return net_socket;
 }
+
+int net_beacons_are_equal(struct net_msg_beacon *beacon1, struct net_msg_beacon *beacon2)
+{
+  if (beacon1->net_family != beacon2->net_family) return 0;
+  if (beacon1->message_id != beacon2->message_id) return 0;
+  if (beacon1->net_port != beacon2->net_port) return 0;
+  if (strcmp(beacon1->net_host, beacon2->net_host) != 0) return 0;
+  return 1;
+}

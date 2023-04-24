@@ -105,16 +105,20 @@ void SwooshNode::StartDataCollector()
     while (running) {
       Sleep(5000);
       uint64_t cur_time = GetTime(0);
-      data_store.RemoveExpired(cur_time);
+      local_data_store.RemoveExpired(cur_time);
     }
   }};
   data_collector_thread.detach();
 }
 
-void SwooshNode::SendDataBeacon(SwooshData *data)
+void SwooshNode::SendDataBeacon(SwooshLocalData *data)
 {
-  uint32_t message_id = next_message_id++;
-  data_store.Store(message_id, data);
+  uint32_t message_id = data->GetMessageId();
+  if (message_id == 0) {
+    message_id = next_message_id++;
+    data->SetMessageId(message_id);
+    local_data_store.Store(data);
+  }
 
   std::thread pre_send_thread{[message_id] {
     net_send_msg_beacon(message_id);
@@ -141,7 +145,7 @@ void SwooshNode::HandleMessageRequest(net_socket *sock)
   }
 
   // get data corresponding to the message id
-  SwooshData *data = data_store.Acquire(message_id, GetTime(0));
+  SwooshLocalData *data = local_data_store.Acquire(message_id, GetTime(0));
   if (!data) {
     DebugLog("ERROR: message %u not found\n", message_id);
     net_close_socket(sock);
@@ -158,7 +162,7 @@ void SwooshNode::HandleMessageRequest(net_socket *sock)
   }
   
   net_close_socket(sock);
-  data_store.Release(message_id);
+  local_data_store.Release(message_id);
 }
 
 void SwooshNode::RequestMessage(net_socket *sock, net_msg_beacon *beacon)
@@ -171,7 +175,7 @@ void SwooshNode::RequestMessage(net_socket *sock, net_msg_beacon *beacon)
   }
 
   // read message
-  SwooshData *data = SwooshData::ReceiveData(beacon, data_type_id, sock);
+  SwooshRemoteData *data = SwooshRemoteData::ReceiveData(beacon, data_type_id, sock);
   if (!data) {
     DebugLog("ERROR: can't read message response\n", data_type_id);
     return;
@@ -185,7 +189,7 @@ void SwooshNode::RequestMessage(net_socket *sock, net_msg_beacon *beacon)
   }
 }
 
-void SwooshNode::ReceiveDataContent(SwooshData *data, std::string local_path)
+void SwooshNode::ReceiveDataContent(SwooshRemoteData *data, std::string local_path)
 {
   std::thread data_downloader_thread{[this, data, local_path] {
     client.OnNetDataDownloading(data, 0.0);
@@ -195,4 +199,9 @@ void SwooshNode::ReceiveDataContent(SwooshData *data, std::string local_path)
     client.OnNetDataDownloaded(data, success);
   }};
   data_downloader_thread.detach();
+}
+
+bool SwooshNode::BeaconsAreEqual(net_msg_beacon *beacon1, net_msg_beacon *beacon2)
+{
+  return net_beacons_are_equal(beacon1, beacon2) == 1;
 }

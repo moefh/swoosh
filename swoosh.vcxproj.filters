@@ -42,6 +42,12 @@
     <ClInclude Include="swoosh_data_store.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="swoosh_local_data.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="swoosh_remote_data.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="swoosh_frame.cpp">
@@ -59,10 +65,13 @@
     <ClCompile Include="util.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="swoosh_data.cpp">
+    <ClCompile Include="swoosh_data_store.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="swoosh_data_store.cpp">
+    <ClCompile Include="swoosh_local_data.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="swoosh_remote_data.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

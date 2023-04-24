@@ -9,7 +9,9 @@ CXXFLAGS = -g -Og -Wall $(shell wx-config --cxxflags)
 LDFLAGS = -g
 LIBS = $(shell wx-config --libs std,aui)
 
-OBJS = swoosh_app.o swoosh_frame.o swoosh_node.o swoosh_data.o swoosh_data_store.o network.o util.o
+OBJS = swoosh_app.o swoosh_frame.o swoosh_node.o \
+       swoosh_local_data.o swoosh_remote_data.o \
+	   swoosh_data_store.o network.o util.o
 
 all: swoosh
 

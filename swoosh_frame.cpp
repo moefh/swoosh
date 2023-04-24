@@ -55,14 +55,14 @@ void SwooshFrame::SendTextMessage()
 {
   auto text = sendText->GetValue();
   if (text.length() != 0) {
-    net.SendDataBeacon(new SwooshTextData(SwooshNode::GetTime(5000), text.ToStdString()));
+    net.SendDataBeacon(new SwooshLocalTextData(SwooshNode::GetTime(5000), text.ToStdString()));
     sendText->SetValue("");
   }
 }
 
 void SwooshFrame::SendFile(std::string file_name)
 {
-  SwooshFileData *data = new SwooshFileData(SWOOSH_DATA_ALWAYS_VALID, file_name);
+  SwooshLocalFileData *data = new SwooshLocalFileData(SWOOSH_DATA_ALWAYS_VALID, file_name);
   net.SendDataBeacon(data);
 
   auto name = GetPathFilename(file_name);
@@ -70,17 +70,29 @@ void SwooshFrame::SendFile(std::string file_name)
   row.push_back(wxVariant("file"));
   row.push_back(wxVariant(name));
   row.push_back(wxVariant(file_name));
-  localFileList->AppendItem(row);
+  localFileList->AppendItem(row, (wxUIntPtr) data);
+  localFileList->Refresh();
 }
 
-void SwooshFrame::AddRemoteFile(SwooshFileData *file)
+void SwooshFrame::AddRemoteFile(SwooshRemoteFileData *file)
 {
+  // check if we already have this file's beacon
+  for (int row = 0; row < remoteFileList->GetItemCount(); row++) {
+    auto item = remoteFileList->RowToItem(row);
+    SwooshRemoteData *data = (SwooshRemoteData *) remoteFileList->GetItemData(item);
+    if (net.BeaconsAreEqual(data->GetBeacon(), file->GetBeacon())) {
+      delete file;
+      return;
+    }
+  }
+
   wxVector<wxVariant> row;
   row.push_back(wxVariant("file"));
   row.push_back(wxVariant(file->GetFileName()));
   row.push_back(wxVariant(""));
   row.push_back(wxVariant(0));
   remoteFileList->AppendItem(row, (wxUIntPtr) file);
+  remoteFileList->Refresh();
 
   // associate data <-> list
   for (int row = 0; row < remoteFileList->GetItemCount(); row++) {
@@ -220,6 +232,7 @@ void SwooshFrame::SetupFileMessagesPanel(wxWindow *parent)
   localFileList->AppendTextColumn("Type", wxDATAVIEW_CELL_INERT, 40, wxALIGN_CENTER);
   localFileList->AppendTextColumn("Name", wxDATAVIEW_CELL_INERT, 130);
   localFileList->AppendTextColumn("Location", wxDATAVIEW_CELL_INERT);
+  localFileList->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, &SwooshFrame::OnLocalFileActivated, this);
   bottomSizer->Add(localFileList, wxSizerFlags(1).Expand().Border(wxALL));
 
   wxBoxSizer *buttonsSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -310,10 +323,10 @@ void SwooshFrame::OnNetNotify(const std::string &message)
   });
 }
 
-void SwooshFrame::OnNetReceivedData(SwooshData *data)
+void SwooshFrame::OnNetReceivedData(SwooshRemoteData *data)
 {
   // text
-  SwooshTextData *text = dynamic_cast<SwooshTextData *>(data);
+  SwooshRemoteTextData *text = dynamic_cast<SwooshRemoteTextData *>(data);
   if (text) {
     std::string message = text->GetText();
     wxGetApp().CallAfter([this, message] {
@@ -324,7 +337,7 @@ void SwooshFrame::OnNetReceivedData(SwooshData *data)
   }
 
   // file
-  SwooshFileData *file = dynamic_cast<SwooshFileData *>(data);
+  SwooshRemoteFileData *file = dynamic_cast<SwooshRemoteFileData *>(data);
   if (file) {
     wxGetApp().CallAfter([this, file] {
       AddRemoteFile(file);
@@ -336,7 +349,7 @@ void SwooshFrame::OnNetReceivedData(SwooshData *data)
   delete data;
 }
 
-void SwooshFrame::OnNetDataDownloading(SwooshData *data, double progress)
+void SwooshFrame::OnNetDataDownloading(SwooshRemoteData *data, double progress)
 {
   auto it = remoteFileDataItem.find(data);
   if (it == remoteFileDataItem.end()) {
@@ -351,7 +364,7 @@ void SwooshFrame::OnNetDataDownloading(SwooshData *data, double progress)
   });
 }
 
-void SwooshFrame::OnNetDataDownloaded(SwooshData *data, bool success)
+void SwooshFrame::OnNetDataDownloaded(SwooshRemoteData *data, bool success)
 {
   auto it = remoteFileDataItem.find(data);
   if (it == remoteFileDataItem.end()) {
@@ -430,7 +443,7 @@ void SwooshFrame::OnAddSendDirClicked(wxCommandEvent &event)
 void SwooshFrame::OnRemoteFileActivated(wxDataViewEvent &event)
 {
   auto item = event.GetItem();
-  auto file = (SwooshFileData *) remoteFileList->GetItemData(item);
+  auto file = (SwooshRemoteFileData *) remoteFileList->GetItemData(item);
 
   wxVariant val;
   remoteFileList->GetStore()->GetValue(val, item, 2);
@@ -445,4 +458,17 @@ void SwooshFrame::OnRemoteFileActivated(wxDataViewEvent &event)
   }
   
   net.ReceiveDataContent(file, local_path.ToStdString());
+}
+
+void SwooshFrame::OnLocalFileActivated(wxDataViewEvent &event)
+{
+  auto item = event.GetItem();
+  auto file = (SwooshLocalFileData *) localFileList->GetItemData(item);
+
+  if (!file) {
+    DebugLog("WARNING: can't find item data\n");
+    return;
+  }
+
+  net.SendDataBeacon(file);
 }

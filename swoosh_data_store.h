@@ -5,17 +5,21 @@
 #include <map>
 #include <mutex>
 
-#include "swoosh_data.h"
+#include "swoosh_local_data.h"
 
 class SwooshDataStore
 {
 protected:
-  std::map<uint32_t, SwooshData*> store;
+  bool running;
+  std::map<uint32_t, SwooshLocalData*> store;
   std::mutex storeMutex;
 
 public:
-  void Store(uint32_t id, SwooshData *data);
-  SwooshData *Acquire(uint32_t id, uint64_t cur_time);
+  SwooshDataStore() : running(true) {}
+
+  void Stop();
+  void Store(SwooshLocalData *data);
+  SwooshLocalData *Acquire(uint32_t id, uint64_t cur_time);
   bool Release(uint32_t id);
   void RemoveExpired(uint64_t cur_time);
 };

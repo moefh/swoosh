@@ -6,27 +6,23 @@
 #include <map>
 #include <mutex>
 
-#include "swoosh_data.h"
+#include "swoosh_local_data.h"
+#include "swoosh_remote_data.h"
 #include "swoosh_data_store.h"
 #include "network.h"
 
-enum {
-  REQUEST_HEAD = 0,
-  REQUEST_BODY = 1,
-};
-
 class SwooshNodeClient {
 public:
-  virtual void OnNetReceivedData(SwooshData *data) = 0;
-  virtual void OnNetDataDownloading(SwooshData *data, double progress) = 0;
-  virtual void OnNetDataDownloaded(SwooshData *data, bool success) = 0;
+  virtual void OnNetReceivedData(SwooshRemoteData *data) = 0;
+  virtual void OnNetDataDownloading(SwooshRemoteData *data, double progress) = 0;
+  virtual void OnNetDataDownloaded(SwooshRemoteData *data, bool success) = 0;
   virtual void OnNetNotify(const std::string &message) = 0;
 };
 
 class SwooshNode {
 private:
   SwooshNodeClient &client;
-  SwooshDataStore data_store;
+  SwooshDataStore local_data_store;
   uint32_t client_id;
   uint32_t next_message_id;
 
@@ -53,9 +49,10 @@ public:
     StartTCPServer();
     StartDataCollector();
   }
-  void Stop() { running = false; }
-  void SendDataBeacon(SwooshData *data);
-  void ReceiveDataContent(SwooshData *data, std::string local_path);
+  void Stop() { running = false; local_data_store.Stop(); }
+  void SendDataBeacon(SwooshLocalData *data);
+  void ReceiveDataContent(SwooshRemoteData *data, std::string local_path);
+  bool BeaconsAreEqual(net_msg_beacon *beacon1, net_msg_beacon *beacon2);
 
   static uint64_t GetTime(uint32_t msec_in_future);
 };

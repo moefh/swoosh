@@ -138,17 +138,20 @@
     <ClInclude Include="swoosh_data.h" />
     <ClInclude Include="swoosh_data_store.h" />
     <ClInclude Include="swoosh_frame.h" />
+    <ClInclude Include="swoosh_local_data.h" />
     <ClInclude Include="swoosh_node.h" />
+    <ClInclude Include="swoosh_remote_data.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="network.c" />
     <ClCompile Include="swoosh_app.cpp" />
-    <ClCompile Include="swoosh_data.cpp" />
     <ClCompile Include="swoosh_data_store.cpp" />
     <ClCompile Include="swoosh_frame.cpp" />
+    <ClCompile Include="swoosh_local_data.cpp" />
     <ClCompile Include="swoosh_node.cpp" />
+    <ClCompile Include="swoosh_remote_data.cpp" />
     <ClCompile Include="util.c" />
   </ItemGroup>
   <ItemGroup>

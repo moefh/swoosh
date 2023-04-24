@@ -49,6 +49,7 @@ int net_recv_data(struct net_socket *sock, void *data, size_t len);
 
 // extract information from beacon
 uint32_t net_get_beacon_message_id(struct net_msg_beacon *beacon);
+int net_beacons_are_equal(struct net_msg_beacon *beacon1, struct net_msg_beacon *beacon2);
 
 // free a beacon
 void net_free_beacon(struct net_msg_beacon *beacon);
