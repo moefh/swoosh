@@ -7,7 +7,7 @@ server and you don't need to mess with IP addresses -- just start it
 and you're good to go. It has been tested on Ubuntu (x86_84), Debian
 (ARM/Raspberry Pi) and Windows 10.
 
-![Swoosh window on Linux](doc/swoosh-window.png)
+![Swoosh window on Windows](doc/swoosh-window.png)
 
 When you send a message, `swoosh` broadcasts a small UDP packet (the
 beacon) announcing the new message for everyone in your local network.
@@ -18,6 +18,23 @@ By default, `swoosh` uses TCP and UDP ports 5559, and sends small
 broadcast packets to UDP port 5559 with every message sent. The port
 numbers can be changed in `swoosh_frame.cpp`, and will be
 configurable in the UI in the future.
+
+
+## File Transfers
+
+Swoosh also supports file transfers. To send a file, just go to the
+file tab and click "Add file" and select a file in your computer.
+This will add a line to the "Sending" list and announce the file to
+your local network. To re-announce the file (necessary when someone
+starts swoosh in another computer after you added the file), just
+double-click it.
+
+When a file announcement is received, a line is added to the
+"Receiving" list. To download the file, just double-click the line
+and select where the file will be saved.
+
+![Swoosh window showing files transfers](doc/swoosh-file-window.png)
+
 
 # Compilation
 
