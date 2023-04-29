@@ -28,6 +28,7 @@ protected:
 
   void SetMessageId(uint32_t message_id) { this->message_id = message_id; }
   int SendString(net_socket *sock, const std::string &str);
+  int SendFile(net_socket *sock, const std::string &filename);
 
 public:
   SwooshLocalData(uint32_t message_id, uint64_t valid_until)
@@ -43,6 +44,17 @@ public:
 
   uint64_t GetValidUntil() { return valid_until; }
   bool IsExpiredAt(uint64_t time) { return (valid_until != SWOOSH_DATA_ALWAYS_VALID) && (valid_until < time); }
+};
+
+// ==========================================================================
+// SwooshLocalPermanentData
+// ==========================================================================
+class SwooshLocalPermanentData : public SwooshLocalData
+{
+public:
+  SwooshLocalPermanentData(uint32_t message_id)
+    : SwooshLocalData(message_id, SWOOSH_DATA_ALWAYS_VALID) {}
+  virtual ~SwooshLocalPermanentData() = default;
 };
 
 // ==========================================================================
@@ -69,7 +81,7 @@ public:
 // ==========================================================================
 // SwooshLocalFileData
 // ==========================================================================
-class SwooshLocalFileData : public SwooshLocalData
+class SwooshLocalFileData : public SwooshLocalPermanentData
 {
 protected:
   std::string file_name;
@@ -79,12 +91,32 @@ protected:
   virtual int SendContentBody(net_socket *sock);
 
 public:
-  SwooshLocalFileData(uint32_t message_id, uint64_t valid_until, const std::string &file_name);
+  SwooshLocalFileData(uint32_t message_id, const std::string &file_name);
 
   virtual ~SwooshLocalFileData() {}
 
   virtual std::string &GetFileName() { return file_name; }
   virtual uint32_t GetFileSize() { return file_size; }
+};
+
+// ==========================================================================
+// SwooshLocalDirData
+// ==========================================================================
+class SwooshLocalDirData : public SwooshLocalPermanentData
+{
+protected:
+  std::string dir_name;
+  uint32_t tree_size;
+
+  virtual int SendContentHead(net_socket *sock);
+  virtual int SendContentBody(net_socket *sock);
+
+public:
+  SwooshLocalDirData(uint32_t message_id, const std::string &dir_name);
+
+  virtual ~SwooshLocalDirData() {}
+
+  virtual std::string &GetDirName() { return dir_name; }
 };
 
 #endif /* SWOOSH_LOCAL_DATA_H_FILE */

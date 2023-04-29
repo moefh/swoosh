@@ -19,9 +19,9 @@ protected:
   wxTextCtrl *sendText;
   wxButton *sendButton;
 
-  std::map<SwooshRemoteData *, wxDataViewItem> remoteFileDataItems;
-  wxDataViewListCtrl *remoteFileList;
-  wxDataViewListCtrl *localFileList;
+  std::map<SwooshRemotePermanentData *, wxDataViewItem> remoteDataItems;
+  wxDataViewListCtrl *remoteDataList;
+  wxDataViewListCtrl *localDataList;
 
   void SetupMenu();
   void SetupContent();
@@ -30,8 +30,9 @@ protected:
   void SetupStatusBar();
 
   void AddTextMessage(const std::string &title, const std::string &content);
-  void AddRemoteFile(SwooshRemoteFileData *file);
+  void AddRemoteData(SwooshRemotePermanentData *data);
   void AddLocalFile(std::string file_name);
+  void AddLocalDir(std::string file_name);
   void SendTextMessage();
 
   void OnUrlClicked(wxTextUrlEvent &event);
@@ -49,8 +50,8 @@ protected:
   // from SwooshNodeClient -- these handlers will be called from other threads:
   virtual void OnNetNotify(const std::string &text);
   virtual void OnNetReceivedData(SwooshRemoteData *data);
-  virtual void OnNetDataDownloading(SwooshRemoteData *data, double progress);
-  virtual void OnNetDataDownloaded(SwooshRemoteData *data, bool success);
+  virtual void OnNetDataDownloading(SwooshRemotePermanentData *data, double progress);
+  virtual void OnNetDataDownloaded(SwooshRemotePermanentData *data, bool success);
 
 public:
   SwooshFrame();

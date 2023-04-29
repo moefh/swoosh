@@ -64,7 +64,7 @@ void SwooshFrame::SendTextMessage()
 void SwooshFrame::AddLocalFile(std::string file_name)
 {
   // add data to serve and broadcast beacon
-  auto data = new SwooshLocalFileData(net.GenerateMessageId(), SWOOSH_DATA_ALWAYS_VALID, file_name);
+  auto data = new SwooshLocalFileData(net.GenerateMessageId(), file_name);
   net.AddLocalData(data);       // data must be added before the beacon is sent
   net.SendDataBeacon(data->GetMessageId());
   net.ReleaseLocalData(data);   // so the message can expire (even though files never expire)
@@ -75,36 +75,58 @@ void SwooshFrame::AddLocalFile(std::string file_name)
   row.push_back(wxVariant("file"));
   row.push_back(wxVariant(name));
   row.push_back(wxVariant(file_name));
-  localFileList->AppendItem(row, (wxUIntPtr) data);
-  localFileList->Refresh();
+  localDataList->AppendItem(row, (wxUIntPtr) data);
+  localDataList->Refresh();
 }
 
-void SwooshFrame::AddRemoteFile(SwooshRemoteFileData *file)
+void SwooshFrame::AddLocalDir(std::string dir_name)
+{
+  // add data to serve and broadcast beacon
+  auto data = new SwooshLocalDirData(net.GenerateMessageId(), dir_name);
+  net.AddLocalData(data);       // data must be added before the beacon is sent
+  net.SendDataBeacon(data->GetMessageId());
+  net.ReleaseLocalData(data);   // so the message can expire (even though files never expire)
+
+  // add to local file list table
+  auto name = GetPathFilename(dir_name);
+  wxVector<wxVariant> row;
+  row.push_back(wxVariant("dir"));
+  row.push_back(wxVariant(name));
+  row.push_back(wxVariant(dir_name));
+  localDataList->AppendItem(row, (wxUIntPtr) data);
+  localDataList->Refresh();
+}
+
+void SwooshFrame::AddRemoteData(SwooshRemotePermanentData *data)
 {
   // check the beacon to see if we already have this file
-  for (int row = 0; row < remoteFileList->GetItemCount(); row++) {
-    auto item = remoteFileList->RowToItem(row);
-    SwooshRemoteData *data = (SwooshRemoteData *) remoteFileList->GetItemData(item);
-    if (net.BeaconsAreEqual(data->GetBeacon(), file->GetBeacon())) {
-      delete file;
+  for (int row = 0; row < remoteDataList->GetItemCount(); row++) {
+    auto item = remoteDataList->RowToItem(row);
+    SwooshRemoteData *item_data = (SwooshRemoteData *) remoteDataList->GetItemData(item);
+    if (net.BeaconsAreEqual(data->GetBeacon(), item_data->GetBeacon())) {
+      delete data;
       return;
     }
   }
 
   // add to remote file list table
   wxVector<wxVariant> row;
-  row.push_back(wxVariant("file"));
-  row.push_back(wxVariant(file->GetFileName()));
+  switch (data->GetType()) {
+  case SWOOSH_DATA_FILE: row.push_back(wxVariant("file")); break;
+  case SWOOSH_DATA_DIR:  row.push_back(wxVariant("dir"));  break;
+  default:               row.push_back(wxVariant("?"));    break;
+  }
+  row.push_back(wxVariant(data->GetName()));
   row.push_back(wxVariant(""));
   row.push_back(wxVariant(0));
-  remoteFileList->AppendItem(row, (wxUIntPtr) file);
-  remoteFileList->Refresh();
+  remoteDataList->AppendItem(row, (wxUIntPtr) data);
+  remoteDataList->Refresh();
 
   // store link between file and list table item
-  for (int row = 0; row < remoteFileList->GetItemCount(); row++) {
-    auto item = remoteFileList->RowToItem(row);
-    if (remoteFileList->GetItemData(item) == (wxUIntPtr) file) {
-      remoteFileDataItems[file] = item;
+  for (int row = 0; row < remoteDataList->GetItemCount(); row++) {
+    auto item = remoteDataList->RowToItem(row);
+    if (remoteDataList->GetItemData(item) == (wxUIntPtr) data) {
+      remoteDataItems[data] = item;
       return;
     }
   }
@@ -217,13 +239,13 @@ void SwooshFrame::SetupFileMessagesPanel(wxWindow *parent)
   wxStaticText *receiveLabel = new wxStaticText(topPanel, wxID_ANY, "Receiving:");
   topSizer->Add(receiveLabel, wxSizerFlags(0).Expand().Border(wxLEFT|wxRIGHT|wxTOP));
 
-  remoteFileList = new wxDataViewListCtrl(topPanel, wxID_ANY);
-  remoteFileList->AppendTextColumn("Type", wxDATAVIEW_CELL_INERT, 40, wxALIGN_CENTER);
-  remoteFileList->AppendTextColumn("Name", wxDATAVIEW_CELL_INERT, 130);
-  remoteFileList->AppendTextColumn("Download to", wxDATAVIEW_CELL_INERT, 200);
-  remoteFileList->AppendProgressColumn("Download progress", wxDATAVIEW_CELL_INERT);
-  remoteFileList->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, &SwooshFrame::OnRemoteFileActivated, this);
-  topSizer->Add(remoteFileList, wxSizerFlags(1).Expand().Border(wxALL));
+  remoteDataList = new wxDataViewListCtrl(topPanel, wxID_ANY);
+  remoteDataList->AppendTextColumn("Type", wxDATAVIEW_CELL_INERT, 40, wxALIGN_CENTER);
+  remoteDataList->AppendTextColumn("Name", wxDATAVIEW_CELL_INERT, 130);
+  remoteDataList->AppendTextColumn("Download to", wxDATAVIEW_CELL_INERT, 200);
+  remoteDataList->AppendProgressColumn("Download progress", wxDATAVIEW_CELL_INERT);
+  remoteDataList->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, &SwooshFrame::OnRemoteFileActivated, this);
+  topSizer->Add(remoteDataList, wxSizerFlags(1).Expand().Border(wxALL));
 
   topPanel->SetSizer(topSizer);
 
@@ -234,12 +256,12 @@ void SwooshFrame::SetupFileMessagesPanel(wxWindow *parent)
   wxStaticText *sendLabel = new wxStaticText(bottomPanel, wxID_ANY, "Sending:");
   bottomSizer->Add(sendLabel, wxSizerFlags(0).Expand().Border(wxLEFT|wxRIGHT|wxTOP));
 
-  localFileList = new wxDataViewListCtrl(bottomPanel, wxID_ANY);
-  localFileList->AppendTextColumn("Type", wxDATAVIEW_CELL_INERT, 40, wxALIGN_CENTER);
-  localFileList->AppendTextColumn("Name", wxDATAVIEW_CELL_INERT, 130);
-  localFileList->AppendTextColumn("Location", wxDATAVIEW_CELL_INERT);
-  localFileList->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, &SwooshFrame::OnLocalFileActivated, this);
-  bottomSizer->Add(localFileList, wxSizerFlags(1).Expand().Border(wxALL));
+  localDataList = new wxDataViewListCtrl(bottomPanel, wxID_ANY);
+  localDataList->AppendTextColumn("Type", wxDATAVIEW_CELL_INERT, 40, wxALIGN_CENTER);
+  localDataList->AppendTextColumn("Name", wxDATAVIEW_CELL_INERT, 130);
+  localDataList->AppendTextColumn("Location", wxDATAVIEW_CELL_INERT);
+  localDataList->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, &SwooshFrame::OnLocalFileActivated, this);
+  bottomSizer->Add(localDataList, wxSizerFlags(1).Expand().Border(wxALL));
 
   wxBoxSizer *buttonsSizer = new wxBoxSizer(wxHORIZONTAL);
   buttonsSizer->AddStretchSpacer();
@@ -248,11 +270,9 @@ void SwooshFrame::SetupFileMessagesPanel(wxWindow *parent)
   addSendFileButton->Bind(wxEVT_BUTTON, &SwooshFrame::OnAddSendFileClicked, this);
   buttonsSizer->Add(addSendFileButton, wxSizerFlags(0).Expand().Border(wxRIGHT));
 
-#if 0
   wxButton *addSendDirButton = new wxButton(bottomPanel, wxID_ANY, "Add Directory");
   addSendDirButton->Bind(wxEVT_BUTTON, &SwooshFrame::OnAddSendDirClicked, this);
   buttonsSizer->Add(addSendDirButton, wxSizerFlags(0).Expand().Border(0));
-#endif
 
   bottomSizer->Add(buttonsSizer, wxSizerFlags(0).Expand().Border(wxLEFT|wxRIGHT|wxBOTTOM));
 
@@ -342,11 +362,11 @@ void SwooshFrame::OnNetReceivedData(SwooshRemoteData *data)
     return;
   }
 
-  // file
-  SwooshRemoteFileData *file = dynamic_cast<SwooshRemoteFileData *>(data);
-  if (file) {
-    wxGetApp().CallAfter([this, file] {
-      AddRemoteFile(file);
+  // permanent data (file, dir)
+  SwooshRemotePermanentData *perm_data = dynamic_cast<SwooshRemotePermanentData *>(data);
+  if (perm_data) {
+    wxGetApp().CallAfter([this, perm_data] {
+      AddRemoteData(perm_data);
     });
     return;
   }
@@ -355,34 +375,34 @@ void SwooshFrame::OnNetReceivedData(SwooshRemoteData *data)
   delete data;
 }
 
-void SwooshFrame::OnNetDataDownloading(SwooshRemoteData *data, double progress)
+void SwooshFrame::OnNetDataDownloading(SwooshRemotePermanentData *data, double progress)
 {
   wxGetApp().CallAfter([this, data, progress] {
-    auto it = remoteFileDataItems.find(data);
-    if (it == remoteFileDataItems.end()) {
+    auto it = remoteDataItems.find(data);
+    if (it == remoteDataItems.end()) {
       DebugLog("ERROR: can't find downloaded data item\n");
       return;
     }
 
     wxDataViewItem &item = it->second;
-    remoteFileList->GetStore()->SetValue(wxVariant((int)(progress*100)), item, 3);
-    remoteFileList->Refresh();
+    remoteDataList->GetStore()->SetValue(wxVariant((int)(progress*100)), item, 3);
+    remoteDataList->Refresh();
   });
 }
 
-void SwooshFrame::OnNetDataDownloaded(SwooshRemoteData *data, bool success)
+void SwooshFrame::OnNetDataDownloaded(SwooshRemotePermanentData *data, bool success)
 {
   wxGetApp().CallAfter([this, data, success] {
-    auto it = remoteFileDataItems.find(data);
-    if (it == remoteFileDataItems.end()) {
+    auto it = remoteDataItems.find(data);
+    if (it == remoteDataItems.end()) {
       DebugLog("ERROR: can't find downloaded data item\n");
       return;
     }
 
     wxDataViewItem &item = it->second;
     if (success) {
-      remoteFileList->GetStore()->SetValue(wxVariant(100), item, 3);
-      remoteFileList->Refresh();
+      remoteDataList->GetStore()->SetValue(wxVariant(100), item, 3);
+      remoteDataList->Refresh();
     }
   });
 }
@@ -433,43 +453,55 @@ void SwooshFrame::OnAddSendDirClicked(wxCommandEvent &event)
   if (openDirDialog.ShowModal() == wxID_CANCEL)
     return;
 
-#if 0
-  auto path = openDirDialog.GetPath();
-  auto filename = openDirDialog.GetName();
-
-  wxVector<wxVariant> data;
-  data.push_back(wxVariant("dir"));
-  data.push_back(wxVariant(GetPathFilename(path)));
-  data.push_back(wxVariant(path));
-  data.push_back(wxVariant(0));
-  localFileList->AppendItem(data);
-#endif
+  AddLocalDir(openDirDialog.GetPath().ToStdString());
 }
 
 void SwooshFrame::OnRemoteFileActivated(wxDataViewEvent &event)
 {
   auto item = event.GetItem();
-  auto file = (SwooshRemoteFileData *) remoteFileList->GetItemData(item);
+  auto data = (SwooshRemotePermanentData *) remoteDataList->GetItemData(item);
 
   wxVariant val;
-  remoteFileList->GetStore()->GetValue(val, item, 2);
+  remoteDataList->GetStore()->GetValue(val, item, 2);
   auto local_path = val.GetString();
+
   if (local_path.IsEmpty()) {
-    wxFileDialog saveFileDialog(this, "Download to", "", file->GetFileName(), "All files|*.*", wxFD_SAVE);
-    if (saveFileDialog.ShowModal() == wxID_CANCEL)
+    switch (data->GetType()) {
+    case SWOOSH_DATA_FILE:
+      {
+        wxFileDialog saveFileDialog(this, "Download to", "", data->GetName(), "All files|*.*", wxFD_SAVE);
+        if (saveFileDialog.ShowModal() == wxID_CANCEL)
+          return;
+        local_path = saveFileDialog.GetPath();
+        remoteDataList->GetStore()->SetValue(wxVariant(local_path), item, 2);
+        remoteDataList->Refresh();
+        break;
+      }
+
+    case SWOOSH_DATA_DIR:
+      {
+        wxDirDialog saveDirDialog(this, "Download to", "", wxDD_DEFAULT_STYLE);
+        if (saveDirDialog.ShowModal() == wxID_CANCEL)
+          return;
+        local_path = saveDirDialog.GetPath();
+        remoteDataList->GetStore()->SetValue(wxVariant(local_path), item, 2);
+        remoteDataList->Refresh();
+        break;
+      }
+
+    default:
+      DebugLog("WARNING: ignoring activation on unknown data type\n");
       return;
-    local_path = saveFileDialog.GetPath();
-    remoteFileList->GetStore()->SetValue(wxVariant(local_path), item, 2);
-    remoteFileList->Refresh();
+    }
   }
   
-  net.ReceiveDataContent(file, local_path.ToStdString());
+  net.ReceiveDataContent(data, local_path.ToStdString());
 }
 
 void SwooshFrame::OnLocalFileActivated(wxDataViewEvent &event)
 {
   auto item = event.GetItem();
-  auto file = (SwooshLocalFileData *) localFileList->GetItemData(item);
+  auto file = (SwooshLocalFileData *) localDataList->GetItemData(item);
 
   if (!file) {
     DebugLog("WARNING: can't find item data\n");

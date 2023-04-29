@@ -148,7 +148,7 @@ void SwooshNode::RequestMessage(net_msg_beacon *beacon)
   }
 }
 
-void SwooshNode::ReceiveDataContent(SwooshRemoteData *data, std::string local_path)
+void SwooshNode::ReceiveDataContent(SwooshRemotePermanentData *data, std::string local_path)
 {
   std::thread data_downloader_thread{[this, data, local_path] {
     client.OnNetDataDownloading(data, 0.0);

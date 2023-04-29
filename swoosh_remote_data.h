@@ -19,6 +19,7 @@ protected:
 
   static SwooshRemoteData *ReceiveData(net_msg_beacon *beacon);
   static std::string *ReceiveString(net_socket *sock, size_t max_size);
+  static int ReceiveFile(net_socket *sock, const std::string &local_path, std::function<void(double)> progress);
 
   virtual bool Download(std::string local_path, std::function<void(double)> progress) = 0;
 
@@ -31,6 +32,20 @@ public:
   net_msg_beacon *GetBeacon() { return beacon; }
 
   bool IsGood() { return is_good; };
+};
+
+// ==========================================================================
+// SwooshRemotePermanentData
+// ==========================================================================
+
+class SwooshRemotePermanentData : public SwooshRemoteData
+{
+public:
+  SwooshRemotePermanentData(net_msg_beacon *beacon) : SwooshRemoteData(beacon) {}
+  virtual ~SwooshRemotePermanentData() = default;
+
+  virtual std::string &GetName() = 0;
+  virtual uint32_t GetType() = 0;
 };
 
 // ==========================================================================
@@ -53,7 +68,7 @@ public:
 // ==========================================================================
 // SwooshRemoteFileData
 // ==========================================================================
-class SwooshRemoteFileData : public SwooshRemoteData
+class SwooshRemoteFileData : public SwooshRemotePermanentData
 {
 protected:
   std::string file_name;
@@ -65,8 +80,40 @@ public:
   SwooshRemoteFileData(net_msg_beacon *beacon, net_socket *sock);
   virtual ~SwooshRemoteFileData() = default;
 
-  virtual std::string &GetFileName() { return file_name; }
-  virtual uint32_t GetFileSize() { return file_size; }
+  virtual std::string &GetName() { return file_name; }
+  virtual uint32_t GetType() { return SWOOSH_DATA_FILE; }
+
+  std::string &GetFileName() { return file_name; }
+  uint32_t GetFileSize() { return file_size; }
+};
+
+// ==========================================================================
+// SwooshRemoteDirData
+// ==========================================================================
+class SwooshRemoteDirData : public SwooshRemotePermanentData
+{
+protected:
+  std::string dir_name;
+  uint32_t tree_size;
+
+  virtual bool Download(std::string local_path, std::function<void(double)> progress);
+
+  bool isGoodLocalFileName(const std::string &file_name) {
+    if (file_name.find("../") != std::string::npos || file_name.find('\\') != std::string::npos) {
+      return false;
+    }
+    return true;
+  }
+
+public:
+  SwooshRemoteDirData(net_msg_beacon *beacon, net_socket *sock);
+  virtual ~SwooshRemoteDirData() = default;
+
+  virtual std::string &GetName() { return dir_name; }
+  virtual uint32_t GetType() { return SWOOSH_DATA_DIR; }
+
+  std::string &GetDirName() { return dir_name; }
+  uint32_t GetTreeSize() { return tree_size; }
 };
 
 #endif /* SWOOSH_REMOTE_DATA_H_FILE */

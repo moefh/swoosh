@@ -15,8 +15,8 @@ class SwooshNodeClient {
 
 protected:
   virtual void OnNetReceivedData(SwooshRemoteData *data) = 0;
-  virtual void OnNetDataDownloading(SwooshRemoteData *data, double progress) = 0;
-  virtual void OnNetDataDownloaded(SwooshRemoteData *data, bool success) = 0;
+  virtual void OnNetDataDownloading(SwooshRemotePermanentData *data, double progress) = 0;
+  virtual void OnNetDataDownloaded(SwooshRemotePermanentData *data, bool success) = 0;
   virtual void OnNetNotify(const std::string &message) = 0;
 };
 
@@ -51,7 +51,7 @@ public:
   uint32_t GenerateMessageId() { return next_message_id++; }
   void Stop() { running = false; local_data_store.Stop(); }
   void SendDataBeacon(uint32_t message_id);
-  void ReceiveDataContent(SwooshRemoteData *data, std::string local_path);
+  void ReceiveDataContent(SwooshRemotePermanentData *data, std::string local_path);
   bool BeaconsAreEqual(net_msg_beacon *beacon1, net_msg_beacon *beacon2);
 
   void AddLocalData(SwooshLocalData *data) { local_data_store.Store(data); }
